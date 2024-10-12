@@ -14,9 +14,60 @@
 #include "duckdb/execution/operator/join/physical_comparison_join.hpp"
 #include "duckdb/execution/physical_operator.hpp"
 #include "duckdb/planner/operator/logical_join.hpp"
+#include "duckdb/storage/temporary_memory_manager.hpp"
 
 namespace duckdb {
+class HashJoinGlobalSinkState : public GlobalSinkState {
+public:
+	HashJoinGlobalSinkState(const PhysicalHashJoin &op_p, ClientContext &context_p);
+	void ScheduleFinalize(Pipeline &pipeline, Event &event);
+	void InitializeProbeSpill();
 
+	void SetSource(optional_ptr<PhysicalOperator> source_p, unique_ptr<GlobalSourceState> source_state_p,
+	               unique_ptr<LocalSourceState> local_source_state_p) {
+		source = move(source_p);
+		source_state = move(source_state_p);
+		local_source_state = move(local_source_state_p);
+	}
+
+public:
+	ClientContext &context;
+	const PhysicalHashJoin &op;
+
+	const idx_t num_threads;
+	//! Temporary memory state for managing this operator's memory usage
+	unique_ptr<TemporaryMemoryState> temporary_memory_state;
+
+	//! Global HT used by the join
+	unique_ptr<JoinHashTable> hash_table;
+	//! The perfect hash join executor (if any)
+	unique_ptr<PerfectHashJoinExecutor> perfect_join_executor;
+	//! Whether or not the hash table has been finalized
+	bool finalized;
+	//! The number of active local states
+	atomic<idx_t> active_local_states;
+
+	//! Whether we are doing an external + some sizes
+	bool external;
+	idx_t total_size;
+	idx_t max_partition_size;
+	idx_t max_partition_count;
+
+	//! Hash tables built by each thread
+	vector<unique_ptr<JoinHashTable>> local_hash_tables;
+
+	//! Excess probe data gathered during Sink
+	vector<LogicalType> probe_types;
+	unique_ptr<JoinHashTable::ProbeSpill> probe_spill;
+
+	//! Whether or not we have started scanning data using GetData
+	atomic<bool> scanned_data;
+
+	unique_ptr<JoinFilterGlobalState> global_filter_state;
+	optional_ptr<PhysicalOperator> source;
+	unique_ptr<GlobalSourceState> source_state;
+	unique_ptr<LocalSourceState> local_source_state;
+};
 //! PhysicalHashJoin represents a hash loop join between two tables
 class PhysicalHashJoin : public PhysicalComparisonJoin {
 public:

@@ -8,6 +8,8 @@
 #include "duckdb/storage/table/row_group_segment_tree.hpp"
 #include "duckdb/transaction/duck_transaction.hpp"
 
+#include <iostream>
+
 namespace duckdb {
 
 TableScanState::TableScanState() : table_state(*this), local_state(*this) {
@@ -154,6 +156,18 @@ ParallelCollectionScanState::ParallelCollectionScanState()
 CollectionScanState::CollectionScanState(TableScanState &parent_p)
     : row_group(nullptr), vector_index(0), max_row_group_row(0), row_groups(nullptr), max_row(0), batch_index(0),
       valid_sel(STANDARD_VECTOR_SIZE), parent(parent_p) {
+}
+bool CollectionScanState::Select(DuckTransaction &transaction, DataChunk &result, idx_t rowid_col_idx,
+                                 std::unordered_map<int64_t, int64_t> &project_column_ids) {
+	auto sel_vec = result.data[rowid_col_idx];
+	// int64_t *sel = DictionaryVector::SelVector(sel_vec);
+	for (int64_t i = 0; i < result.size(); i++) {
+		auto rowid = sel_vec.GetValue(i).GetValue<int64_t>();
+		std::cout << rowid << std::endl;
+		auto row_group = row_groups->GetSegment(rowid);
+		row_group->GetScalar(transaction, *this, result, rowid, project_column_ids, i);
+	}
+	return true;
 }
 
 bool CollectionScanState::Scan(DuckTransaction &transaction, DataChunk &result) {

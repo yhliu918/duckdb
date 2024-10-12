@@ -8,16 +8,16 @@
 
 #pragma once
 
-#include "duckdb/common/vector_size.hpp"
-#include "duckdb/storage/table/chunk_info.hpp"
-#include "duckdb/storage/statistics/segment_statistics.hpp"
-#include "duckdb/common/types/data_chunk.hpp"
+#include "duckdb/common/enums/checkpoint_type.hpp"
 #include "duckdb/common/enums/scan_options.hpp"
 #include "duckdb/common/mutex.hpp"
+#include "duckdb/common/types/data_chunk.hpp"
+#include "duckdb/common/vector_size.hpp"
 #include "duckdb/parser/column_list.hpp"
-#include "duckdb/storage/table/segment_base.hpp"
 #include "duckdb/storage/block.hpp"
-#include "duckdb/common/enums/checkpoint_type.hpp"
+#include "duckdb/storage/statistics/segment_statistics.hpp"
+#include "duckdb/storage/table/chunk_info.hpp"
+#include "duckdb/storage/table/segment_base.hpp"
 
 namespace duckdb {
 class AttachedDatabase;
@@ -114,6 +114,8 @@ public:
 	//! skipped.
 	bool CheckZonemapSegments(CollectionScanState &state);
 	void Scan(TransactionData transaction, CollectionScanState &state, DataChunk &result);
+	void GetScalar(TransactionData transaction, CollectionScanState &state, DataChunk &result, uint64_t row_id,
+	               std::unordered_map<int64_t, int64_t> &project_column_ids, int64_t result_rowid);
 	void ScanCommitted(CollectionScanState &state, DataChunk &result, TableScanType type);
 
 	idx_t GetSelVector(TransactionData transaction, idx_t vector_idx, SelectionVector &sel_vector, idx_t max_count);

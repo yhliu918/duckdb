@@ -109,69 +109,6 @@ unique_ptr<JoinFilterGlobalState> JoinFilterPushdownInfo::GetGlobalState(ClientC
 	return result;
 }
 
-class HashJoinGlobalSinkState : public GlobalSinkState {
-public:
-	HashJoinGlobalSinkState(const PhysicalHashJoin &op_p, ClientContext &context_p)
-	    : context(context_p), op(op_p),
-	      num_threads(NumericCast<idx_t>(TaskScheduler::GetScheduler(context).NumberOfThreads())),
-	      temporary_memory_state(TemporaryMemoryManager::Get(context).Register(context)), finalized(false),
-	      active_local_states(0), total_size(0), max_partition_size(0), max_partition_count(0), scanned_data(false) {
-		hash_table = op.InitializeHashTable(context);
-
-		// For perfect hash join
-		perfect_join_executor = make_uniq<PerfectHashJoinExecutor>(op, *hash_table, op.perfect_join_statistics);
-		// For external hash join
-		external = ClientConfig::GetConfig(context).force_external;
-		// Set probe types
-		const auto &payload_types = op.children[0]->types;
-		probe_types.insert(probe_types.end(), op.condition_types.begin(), op.condition_types.end());
-		probe_types.insert(probe_types.end(), payload_types.begin(), payload_types.end());
-		probe_types.emplace_back(LogicalType::HASH);
-
-		if (op.filter_pushdown) {
-			global_filter_state = op.filter_pushdown->GetGlobalState(context, op);
-		}
-	}
-
-	void ScheduleFinalize(Pipeline &pipeline, Event &event);
-	void InitializeProbeSpill();
-
-public:
-	ClientContext &context;
-	const PhysicalHashJoin &op;
-
-	const idx_t num_threads;
-	//! Temporary memory state for managing this operator's memory usage
-	unique_ptr<TemporaryMemoryState> temporary_memory_state;
-
-	//! Global HT used by the join
-	unique_ptr<JoinHashTable> hash_table;
-	//! The perfect hash join executor (if any)
-	unique_ptr<PerfectHashJoinExecutor> perfect_join_executor;
-	//! Whether or not the hash table has been finalized
-	bool finalized;
-	//! The number of active local states
-	atomic<idx_t> active_local_states;
-
-	//! Whether we are doing an external + some sizes
-	bool external;
-	idx_t total_size;
-	idx_t max_partition_size;
-	idx_t max_partition_count;
-
-	//! Hash tables built by each thread
-	vector<unique_ptr<JoinHashTable>> local_hash_tables;
-
-	//! Excess probe data gathered during Sink
-	vector<LogicalType> probe_types;
-	unique_ptr<JoinHashTable::ProbeSpill> probe_spill;
-
-	//! Whether or not we have started scanning data using GetData
-	atomic<bool> scanned_data;
-
-	unique_ptr<JoinFilterGlobalState> global_filter_state;
-};
-
 unique_ptr<JoinFilterLocalState> JoinFilterPushdownInfo::GetLocalState(JoinFilterGlobalState &gstate) const {
 	auto result = make_uniq<JoinFilterLocalState>();
 	result->local_aggregate_state = make_uniq<LocalUngroupedAggregateState>(*gstate.global_aggregate_state);
@@ -216,6 +153,28 @@ public:
 
 	unique_ptr<JoinFilterLocalState> local_filter_state;
 };
+
+HashJoinGlobalSinkState::HashJoinGlobalSinkState(const PhysicalHashJoin &op_p, ClientContext &context_p)
+    : context(context_p), op(op_p),
+      num_threads(NumericCast<idx_t>(TaskScheduler::GetScheduler(context).NumberOfThreads())),
+      temporary_memory_state(TemporaryMemoryManager::Get(context).Register(context)), finalized(false),
+      active_local_states(0), total_size(0), max_partition_size(0), max_partition_count(0), scanned_data(false) {
+	hash_table = op.InitializeHashTable(context);
+
+	// For perfect hash join
+	perfect_join_executor = make_uniq<PerfectHashJoinExecutor>(op, *hash_table, op.perfect_join_statistics);
+	// For external hash join
+	external = ClientConfig::GetConfig(context).force_external;
+	// Set probe types
+	const auto &payload_types = op.children[0]->types;
+	probe_types.insert(probe_types.end(), op.condition_types.begin(), op.condition_types.end());
+	probe_types.insert(probe_types.end(), payload_types.begin(), payload_types.end());
+	probe_types.emplace_back(LogicalType::HASH);
+
+	if (op.filter_pushdown) {
+		global_filter_state = op.filter_pushdown->GetGlobalState(context, op);
+	}
+}
 
 unique_ptr<JoinHashTable> PhysicalHashJoin::InitializeHashTable(ClientContext &context) const {
 	auto result = make_uniq<JoinHashTable>(context, conditions, payload_types, join_type, rhs_output_columns);

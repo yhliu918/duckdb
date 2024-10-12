@@ -168,6 +168,9 @@ struct OperatorSourceInput {
 	GlobalSourceState &global_state;
 	LocalSourceState &local_state;
 	InterruptState &interrupt_state;
+	bool materialize_flag;
+	int64_t rowid_column_id;
+	unordered_map<int64_t, int64_t> materialize_col_id;
 };
 
 struct OperatorSinkCombineInput {

@@ -1,7 +1,7 @@
 #include "duckdb/execution/operator/helper/physical_materialized_collector.hpp"
 
-#include "duckdb/main/materialized_query_result.hpp"
 #include "duckdb/main/client_context.hpp"
+#include "duckdb/main/materialized_query_result.hpp"
 
 namespace duckdb {
 
@@ -12,6 +12,13 @@ PhysicalMaterializedCollector::PhysicalMaterializedCollector(PreparedStatementDa
 SinkResultType PhysicalMaterializedCollector::Sink(ExecutionContext &context, DataChunk &chunk,
                                                    OperatorSinkInput &input) const {
 	auto &lstate = input.local_state.Cast<MaterializedCollectorLocalState>();
+	auto &types = lstate.collection->Types();
+	if (types.size() == 2) {
+		lstate.collection->InitializeAppend(LogicalType::VARCHAR);
+		lstate.collection->InitializeAppend(LogicalType::BIGINT);
+		// lstate.collection->InitializeAppend(LogicalType::VARCHAR);
+		lstate.append_state.vector_data.resize(lstate.collection->Types().size());
+	}
 	lstate.collection->Append(lstate.append_state, chunk);
 	return SinkResultType::NEED_MORE_INPUT;
 }

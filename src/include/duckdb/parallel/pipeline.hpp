@@ -9,13 +9,13 @@
 #pragma once
 
 #include "duckdb/common/atomic.hpp"
-#include "duckdb/common/unordered_set.hpp"
+#include "duckdb/common/reference_map.hpp"
 #include "duckdb/common/set.hpp"
+#include "duckdb/common/unordered_set.hpp"
 #include "duckdb/execution/physical_operator.hpp"
 #include "duckdb/function/table_function.hpp"
-#include "duckdb/parallel/task_scheduler.hpp"
-#include "duckdb/common/reference_map.hpp"
 #include "duckdb/parallel/executor_task.hpp"
+#include "duckdb/parallel/task_scheduler.hpp"
 
 namespace duckdb {
 
@@ -120,6 +120,13 @@ public:
 	//! Updates the batch index of a pipeline (and returns the new minimum batch index)
 	idx_t UpdateBatchIndex(idx_t old_index, idx_t new_index);
 
+	void SetMaterializeSource(optional_ptr<PhysicalOperator> op, unique_ptr<GlobalSourceState> state,
+	                          unique_ptr<LocalSourceState> local_state) {
+		materialize_source = move(op);
+		materialize_source_state = move(state);
+		materialize_local_source_state = move(local_state);
+	}
+
 private:
 	//! Whether or not the pipeline has been readied
 	bool ready;
@@ -127,6 +134,11 @@ private:
 	atomic<bool> initialized;
 	//! The source of this pipeline
 	optional_ptr<PhysicalOperator> source;
+
+	optional_ptr<PhysicalOperator> materialize_source;
+	unique_ptr<GlobalSourceState> materialize_source_state;
+	unique_ptr<LocalSourceState> materialize_local_source_state;
+
 	//! The chain of intermediate operators
 	vector<reference<PhysicalOperator>> operators;
 	//! The sink (i.e. destination) for data; this is e.g. a hash table to-be-built
