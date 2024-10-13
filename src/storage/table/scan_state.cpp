@@ -163,10 +163,15 @@ bool CollectionScanState::Select(DuckTransaction &transaction, DataChunk &result
 	// int64_t *sel = DictionaryVector::SelVector(sel_vec);
 	for (int64_t i = 0; i < result.size(); i++) {
 		auto rowid = sel_vec.GetValue(i).GetValue<int64_t>();
-		std::cout << rowid << std::endl;
+		// std::cout << rowid << std::endl;
 		auto row_group = row_groups->GetSegment(rowid);
 		row_group->GetScalar(transaction, *this, result, rowid, project_column_ids, i);
 	}
+	// auto rowid = 0;
+	// std::cout << rowid << std::endl;
+	// auto row_group = row_groups->GetSegment(rowid);
+	// row_group->GetScalar(transaction, *this, result, rowid, project_column_ids, 0);
+	// std::cout << result.data[1].GetValue(0).GetValue<int32_t>() << std::endl;
 	return true;
 }
 

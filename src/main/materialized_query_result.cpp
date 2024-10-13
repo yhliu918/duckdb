@@ -1,7 +1,8 @@
 #include "duckdb/main/materialized_query_result.hpp"
+
+#include "duckdb/common/box_renderer.hpp"
 #include "duckdb/common/to_string.hpp"
 #include "duckdb/main/client_context.hpp"
-#include "duckdb/common/box_renderer.hpp"
 
 namespace duckdb {
 
@@ -23,17 +24,18 @@ string MaterializedQueryResult::ToString() {
 		result = HeaderToString();
 		result += "[ Rows: " + to_string(collection->Count()) + "]\n";
 		auto &coll = Collection();
-		for (auto &row : coll.Rows()) {
-			for (idx_t col_idx = 0; col_idx < coll.ColumnCount(); col_idx++) {
-				if (col_idx > 0) {
-					result += "\t";
-				}
-				auto val = row.GetValue(col_idx);
-				result += val.IsNull() ? "NULL" : StringUtil::Replace(val.ToString(), string("\0", 1), "\\0");
-			}
-			result += "\n";
-		}
-		result += "\n";
+		// for (auto &row : coll.Rows()) {
+		// 	for (idx_t col_idx = 0; col_idx < coll.ColumnCount(); col_idx++) {
+		// 		if (col_idx > 0) {
+		// 			result += "\t";
+		// 		}
+		// 		auto val = row.GetValue(col_idx);
+		// 		result += val.IsNull() ? "NULL" : StringUtil::Replace(val.ToString(), string("\0", 1), "\\0");
+		// 	}
+		// 	result += "\n";
+		// }
+		// result += "\n";
+		result += "[ Rows: " + to_string(collection->Count()) + "]\n";
 	} else {
 		result = GetError() + "\n";
 	}

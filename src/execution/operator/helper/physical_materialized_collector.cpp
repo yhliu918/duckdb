@@ -13,11 +13,12 @@ SinkResultType PhysicalMaterializedCollector::Sink(ExecutionContext &context, Da
                                                    OperatorSinkInput &input) const {
 	auto &lstate = input.local_state.Cast<MaterializedCollectorLocalState>();
 	auto &types = lstate.collection->Types();
-	if (types.size() == 2) {
-		lstate.collection->InitializeAppend(LogicalType::VARCHAR);
-		lstate.collection->InitializeAppend(LogicalType::BIGINT);
-		// lstate.collection->InitializeAppend(LogicalType::VARCHAR);
+	if (input.materialize_flag && !lstate.set_output) {
+		for (auto [col, type] : input.materialize_column_types) {
+			lstate.collection->InitializeAppend(LogicalType(LogicalTypeId(type)));
+		}
 		lstate.append_state.vector_data.resize(lstate.collection->Types().size());
+		lstate.set_output = true;
 	}
 	lstate.collection->Append(lstate.append_state, chunk);
 	return SinkResultType::NEED_MORE_INPUT;

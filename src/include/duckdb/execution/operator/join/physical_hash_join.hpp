@@ -23,8 +23,9 @@ public:
 	void ScheduleFinalize(Pipeline &pipeline, Event &event);
 	void InitializeProbeSpill();
 
-	void SetSource(optional_ptr<PhysicalOperator> source_p, unique_ptr<GlobalSourceState> source_state_p,
-	               unique_ptr<LocalSourceState> local_source_state_p) {
+	void SetSource(shared_ptr<RowGroupCollection> mat_table_p, optional_ptr<PhysicalOperator> source_p,
+	               unique_ptr<GlobalSourceState> source_state_p, unique_ptr<LocalSourceState> local_source_state_p) {
+		mat_table = move(mat_table_p);
 		source = move(source_p);
 		source_state = move(source_state_p);
 		local_source_state = move(local_source_state_p);
@@ -67,6 +68,7 @@ public:
 	optional_ptr<PhysicalOperator> source;
 	unique_ptr<GlobalSourceState> source_state;
 	unique_ptr<LocalSourceState> local_source_state;
+	shared_ptr<RowGroupCollection> mat_table;
 };
 //! PhysicalHashJoin represents a hash loop join between two tables
 class PhysicalHashJoin : public PhysicalComparisonJoin {

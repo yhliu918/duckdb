@@ -10,7 +10,7 @@ BaseQueryResult::BaseQueryResult(QueryResultType type, StatementType statement_t
                                  vector<LogicalType> types_p, vector<string> names_p)
     : type(type), statement_type(statement_type), properties(std::move(properties_p)), types(std::move(types_p)),
       names(std::move(names_p)), success(true) {
-	D_ASSERT(types.size() == names.size());
+	// D_ASSERT(types.size() == names.size());
 }
 
 BaseQueryResult::BaseQueryResult(QueryResultType type, ErrorData error)

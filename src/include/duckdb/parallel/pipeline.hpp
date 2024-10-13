@@ -16,6 +16,7 @@
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/parallel/executor_task.hpp"
 #include "duckdb/parallel/task_scheduler.hpp"
+#include "duckdb/storage/table/row_group_collection.hpp"
 
 namespace duckdb {
 
@@ -120,12 +121,21 @@ public:
 	//! Updates the batch index of a pipeline (and returns the new minimum batch index)
 	idx_t UpdateBatchIndex(idx_t old_index, idx_t new_index);
 
-	void SetMaterializeSource(optional_ptr<PhysicalOperator> op, unique_ptr<GlobalSourceState> state,
-	                          unique_ptr<LocalSourceState> local_state) {
-		materialize_source = move(op);
+	void SetMaterializeSource(shared_ptr<RowGroupCollection> table, optional_ptr<PhysicalOperator> op,
+	                          unique_ptr<GlobalSourceState> state, unique_ptr<LocalSourceState> local_state) {
+		mat_table = table;
+		materialize_source = op;
 		materialize_source_state = move(state);
 		materialize_local_source_state = move(local_state);
 	}
+
+	void SetMaterializeMap(unordered_map<int64_t, int64_t> colid, map<int64_t, int8_t> types) {
+		materialize_column_ids = move(colid);
+		materialize_column_types = move(types);
+		materialize_flag = true;
+	}
+
+	bool materialize_flag = false;
 
 private:
 	//! Whether or not the pipeline has been readied
@@ -138,6 +148,9 @@ private:
 	optional_ptr<PhysicalOperator> materialize_source;
 	unique_ptr<GlobalSourceState> materialize_source_state;
 	unique_ptr<LocalSourceState> materialize_local_source_state;
+	shared_ptr<RowGroupCollection> mat_table;
+	unordered_map<int64_t, int64_t> materialize_column_ids;
+	map<int64_t, int8_t> materialize_column_types;
 
 	//! The chain of intermediate operators
 	vector<reference<PhysicalOperator>> operators;

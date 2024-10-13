@@ -232,6 +232,10 @@ public:
 	static void VerifyUniqueIndexes(TableIndexList &indexes, ClientContext &context, DataChunk &chunk,
 	                                optional_ptr<ConflictManager> conflict_manager);
 
+	shared_ptr<RowGroupCollection> GetRowGroupCollection() {
+		return move(row_groups);
+	}
+
 private:
 	//! Verify the new added constraints against current persistent&local data
 	void VerifyNewConstraint(LocalStorage &local_storage, DataTable &parent, const BoundConstraint &constraint);
