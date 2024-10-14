@@ -642,12 +642,18 @@ void RowGroup::Scan(TransactionData transaction, CollectionScanState &state, Dat
 }
 
 void RowGroup::GetScalar(TransactionData transaction, CollectionScanState &state, DataChunk &result, uint64_t row_id,
-                         std::unordered_map<int64_t, int64_t> &project_column_ids, int64_t result_rowid) {
-	auto cfs = ColumnFetchState();
+                         std::unordered_map<int64_t, int64_t> &project_column_ids, int64_t result_rowid,
+                         ColumnFetchState &cfs) {
 	for (auto [col_idx, result_col_idx] : project_column_ids) {
 		auto &column_data = GetColumn(col_idx);
 		column_data.FetchRow(transaction, cfs, row_id, result.data[result_col_idx], result_rowid);
 	}
+}
+
+void RowGroup::GetScalarCol(TransactionData transaction, CollectionScanState &state, Vector &result, uint64_t row_id,
+                            int64_t col_idx, int64_t result_rowid, ColumnFetchState &cfs) {
+	auto &column_data = GetColumn(col_idx);
+	column_data.FetchRow(transaction, cfs, row_id, result, result_rowid);
 }
 
 void RowGroup::ScanCommitted(CollectionScanState &state, DataChunk &result, TableScanType type) {

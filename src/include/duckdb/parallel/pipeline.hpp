@@ -136,6 +136,7 @@ public:
 	}
 
 	bool materialize_flag = false;
+	int thread_num = 0;
 
 private:
 	//! Whether or not the pipeline has been readied

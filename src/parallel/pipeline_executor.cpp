@@ -20,6 +20,7 @@ namespace duckdb {
 PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_p)
     : pipeline(pipeline_p), thread(context_p), context(context_p, thread, &pipeline_p) {
 	D_ASSERT(pipeline.source_state);
+	int num = 0;
 	if (pipeline.sink) {
 		local_sink_state = pipeline.sink->GetLocalSinkState(context);
 		requires_batch_index = pipeline.sink->RequiresBatchIndex() && pipeline.source->SupportsBatchIndex();
@@ -30,6 +31,15 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 			partition_info.batch_index = pipeline.RegisterNewBatchIndex();
 			partition_info.min_batch_index = partition_info.batch_index;
 		}
+		if (pipeline.sink->type == PhysicalOperatorType::HASH_JOIN ||
+		    pipeline.sink->type == PhysicalOperatorType::RESULT_COLLECTOR) {
+			std::ifstream file("/root/duckdb_ht/duckdb/examples/embedded-c++/config_num", std::ios::in);
+			if (file.is_open()) {
+				file >> num;
+				file.close();
+			}
+			pipeline.thread_num = num;
+		}
 	}
 	local_source_state = pipeline.source->GetLocalSourceState(context, *pipeline.source_state);
 
@@ -39,10 +49,14 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 	for (idx_t i = 0; i < pipeline.operators.size(); i++) {
 		if (pipeline.operators[i].get().type == PhysicalOperatorType::HASH_JOIN) {
 			auto &state = pipeline.operators[i].get().sink_state->Cast<HashJoinGlobalSinkState>();
-			if (state.source_state) {
-				pipeline.SetMaterializeSource(state.mat_table, state.source, move(state.source_state),
-				                              move(state.local_source_state));
+			if (state.mat_table && state.source_state) {
+				if (pipeline.thread_num == num) {
+					pipeline.thread_num--;
+					pipeline.SetMaterializeSource(move(state.mat_table), state.source, move(state.source_state),
+					                              move(state.local_source_state));
+				}
 			}
+
 			mat_flag = true;
 		}
 		auto &prev_operator = i == 0 ? *pipeline.source : pipeline.operators[i - 1].get();
@@ -401,13 +415,16 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 		intermediate_states[i]->Finalize(pipeline.operators[i].get(), context);
 	}
 	if (pipeline.sink->type == PhysicalOperatorType::HASH_JOIN) {
-		pipeline.sink->sink_state->Cast<HashJoinGlobalSinkState>().SetSource(
-		    pipeline.source.get()
-		        ->Cast<PhysicalTableScan>()
-		        .bind_data->Cast<TableScanBindData>()
-		        .table.GetDataTable()
-		        ->GetRowGroupCollection(),
-		    pipeline.source, move(pipeline.source_state), move(local_source_state));
+		pipeline.thread_num--;
+		if (pipeline.thread_num == 0) {
+			pipeline.sink->sink_state->Cast<HashJoinGlobalSinkState>().SetSource(
+			    pipeline.source.get()
+			        ->Cast<PhysicalTableScan>()
+			        .bind_data->Cast<TableScanBindData>()
+			        .table.GetDataTable()
+			        ->GetRowGroupCollection(),
+			    pipeline.source, move(pipeline.source_state), move(local_source_state));
+		}
 	}
 	pipeline.executor.Flush(thread);
 	local_sink_state.reset();

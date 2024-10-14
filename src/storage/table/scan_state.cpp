@@ -161,17 +161,35 @@ bool CollectionScanState::Select(DuckTransaction &transaction, DataChunk &result
                                  std::unordered_map<int64_t, int64_t> &project_column_ids) {
 	auto sel_vec = result.data[rowid_col_idx];
 	// int64_t *sel = DictionaryVector::SelVector(sel_vec);
+	auto cfs = ColumnFetchState();
 	for (int64_t i = 0; i < result.size(); i++) {
 		auto rowid = sel_vec.GetValue(i).GetValue<int64_t>();
 		// std::cout << rowid << std::endl;
 		auto row_group = row_groups->GetSegment(rowid);
-		row_group->GetScalar(transaction, *this, result, rowid, project_column_ids, i);
+		row_group->GetScalar(transaction, *this, result, rowid, project_column_ids, i, cfs);
 	}
-	// auto rowid = 0;
-	// std::cout << rowid << std::endl;
-	// auto row_group = row_groups->GetSegment(rowid);
-	// row_group->GetScalar(transaction, *this, result, rowid, project_column_ids, 0);
-	// std::cout << result.data[1].GetValue(0).GetValue<int32_t>() << std::endl;
+	return true;
+}
+
+bool CollectionScanState::SelectCol(DuckTransaction &transaction, DataChunk &result, idx_t rowid_col_idx,
+                                    std::unordered_map<int64_t, int64_t> &project_column_ids) {
+	auto sel_vec = result.data[rowid_col_idx];
+	// int64_t *sel = DictionaryVector::SelVector(sel_vec);
+	auto cfs = ColumnFetchState();
+	for (auto [col_idx, result_col_idx] : project_column_ids) {
+		auto &result_vec = result.data[result_col_idx];
+		for (int64_t i = 0; i < result.size(); i++) {
+			auto rowid = sel_vec.GetValue(i).GetValue<int64_t>();
+			auto row_group = row_groups->GetSegment(rowid);
+			row_group->GetScalarCol(transaction, *this, result_vec, rowid, col_idx, i, cfs);
+		}
+	}
+	// for (int64_t i = 0; i < result.size(); i++) {
+	// 	auto rowid = sel_vec.GetValue(i).GetValue<int64_t>();
+	// 	// std::cout << rowid << std::endl;
+	// 	auto row_group = row_groups->GetSegment(rowid);
+	// 	row_group->GetScalar(transaction, *this, result, rowid, project_column_ids, i, cfs);
+	// }
 	return true;
 }
 

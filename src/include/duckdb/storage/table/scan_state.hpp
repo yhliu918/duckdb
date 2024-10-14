@@ -195,6 +195,8 @@ public:
 	TableScanOptions &GetOptions();
 	bool Select(DuckTransaction &transaction, DataChunk &result, idx_t rowid_col_idx,
 	            std::unordered_map<int64_t, int64_t> &project_column_ids);
+	bool SelectCol(DuckTransaction &transaction, DataChunk &result, idx_t rowid_col_idx,
+	               std::unordered_map<int64_t, int64_t> &project_column_ids);
 	bool Scan(DuckTransaction &transaction, DataChunk &result);
 	bool ScanCommitted(DataChunk &result, TableScanType type);
 	bool ScanCommitted(DataChunk &result, SegmentLock &l, TableScanType type);
