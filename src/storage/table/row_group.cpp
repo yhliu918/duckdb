@@ -65,6 +65,10 @@ RowGroup::RowGroup(RowGroupCollection &collection_p, PersistentRowGroupData &dat
 
 	Verify();
 }
+std::pair<idx_t, idx_t> RowGroup::GetRange() const {
+	return std::make_pair(collection.get().GetStartRow(),
+	                      collection.get().GetStartRow() + collection.get().GetTotalRows());
+}
 
 void RowGroup::MoveToCollection(RowGroupCollection &collection_p, idx_t new_start) {
 	this->collection = collection_p;

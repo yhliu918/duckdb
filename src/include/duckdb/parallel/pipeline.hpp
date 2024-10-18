@@ -137,7 +137,12 @@ public:
 
 	bool materialize_flag = false;
 	int thread_num = 0;
+	void incrementOperatorTime(double time, int op_idx){
+		operator_total_time[op_idx] += time;
+	}
 
+	vector<double> operator_total_time;
+	double mat_operator_time = 0;
 private:
 	//! Whether or not the pipeline has been readied
 	bool ready;
@@ -155,6 +160,7 @@ private:
 
 	//! The chain of intermediate operators
 	vector<reference<PhysicalOperator>> operators;
+
 	//! The sink (i.e. destination) for data; this is e.g. a hash table to-be-built
 	optional_ptr<PhysicalOperator> sink;
 

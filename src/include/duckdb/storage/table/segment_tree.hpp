@@ -9,11 +9,11 @@
 #pragma once
 
 #include "duckdb/common/constants.hpp"
-#include "duckdb/storage/storage_lock.hpp"
-#include "duckdb/storage/table/segment_lock.hpp"
-#include "duckdb/common/vector.hpp"
 #include "duckdb/common/mutex.hpp"
 #include "duckdb/common/string_util.hpp"
+#include "duckdb/common/vector.hpp"
+#include "duckdb/storage/storage_lock.hpp"
+#include "duckdb/storage/table/segment_lock.hpp"
 
 namespace duckdb {
 
@@ -134,6 +134,9 @@ public:
 	}
 	T *GetSegment(SegmentLock &l, idx_t row_number) {
 		return nodes[GetSegmentIndex(l, row_number)].node.get();
+	}
+	T *GetSegmentNode(idx_t node_idx) {
+		return nodes[node_idx].node.get();
 	}
 
 	//! Append a column segment to the tree

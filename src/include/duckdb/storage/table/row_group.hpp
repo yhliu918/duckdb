@@ -85,6 +85,7 @@ private:
 	vector<shared_ptr<ColumnData>> columns;
 
 public:
+	std::pair<idx_t, idx_t> GetRange() const;
 	void MoveToCollection(RowGroupCollection &collection, idx_t new_start);
 	RowGroupCollection &GetCollection() {
 		return collection.get();
