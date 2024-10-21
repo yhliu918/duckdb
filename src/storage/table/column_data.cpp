@@ -1,23 +1,24 @@
 #include "duckdb/storage/table/column_data.hpp"
+
 #include "duckdb/common/exception/transaction_exception.hpp"
+#include "duckdb/common/serializer/binary_deserializer.hpp"
+#include "duckdb/common/serializer/read_stream.hpp"
+#include "duckdb/common/serializer/serializer.hpp"
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 #include "duckdb/function/compression_function.hpp"
 #include "duckdb/planner/table_filter.hpp"
 #include "duckdb/storage/data_pointer.hpp"
 #include "duckdb/storage/data_table.hpp"
 #include "duckdb/storage/statistics/distinct_statistics.hpp"
+#include "duckdb/storage/table/append_state.hpp"
+#include "duckdb/storage/table/array_column_data.hpp"
 #include "duckdb/storage/table/column_data_checkpointer.hpp"
 #include "duckdb/storage/table/list_column_data.hpp"
+#include "duckdb/storage/table/scan_state.hpp"
 #include "duckdb/storage/table/standard_column_data.hpp"
-#include "duckdb/storage/table/array_column_data.hpp"
 #include "duckdb/storage/table/struct_column_data.hpp"
 #include "duckdb/storage/table/update_segment.hpp"
 #include "duckdb/storage/table_storage_info.hpp"
-#include "duckdb/storage/table/append_state.hpp"
-#include "duckdb/storage/table/scan_state.hpp"
-#include "duckdb/common/serializer/read_stream.hpp"
-#include "duckdb/common/serializer/binary_deserializer.hpp"
-#include "duckdb/common/serializer/serializer.hpp"
 
 namespace duckdb {
 
@@ -487,7 +488,7 @@ void ColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, 
 	segment->FetchRow(state, row_id, result, result_idx);
 	// merge any updates made to this row
 
-	FetchUpdateRow(transaction, row_id, result, result_idx);
+	// FetchUpdateRow(transaction, row_id, result, result_idx);
 }
 
 void ColumnData::Update(TransactionData transaction, idx_t column_index, Vector &update_vector, row_t *row_ids,

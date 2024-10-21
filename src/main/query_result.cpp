@@ -170,6 +170,10 @@ void QueryResult::Print() {
 	Printer::Print(ToString());
 }
 
+void QueryResult::PrintRowNumber() {
+	std::cout << GetRowNumber() << " ";
+}
+
 string QueryResult::HeaderToString() {
 	string result;
 	for (auto &name : names) {

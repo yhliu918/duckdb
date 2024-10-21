@@ -1,9 +1,9 @@
 #include "duckdb/main/stream_query_result.hpp"
 
-#include "duckdb/main/client_context.hpp"
-#include "duckdb/main/materialized_query_result.hpp"
 #include "duckdb/common/box_renderer.hpp"
+#include "duckdb/main/client_context.hpp"
 #include "duckdb/main/database.hpp"
+#include "duckdb/main/materialized_query_result.hpp"
 
 namespace duckdb {
 
@@ -31,6 +31,10 @@ string StreamQueryResult::ToString() {
 		result = GetError() + "\n";
 	}
 	return result;
+}
+
+int64_t StreamQueryResult::GetRowNumber() {
+	return 0;
 }
 
 unique_ptr<ClientContextLock> StreamQueryResult::LockContext() {

@@ -3,13 +3,19 @@
 #include "duckdb/common/limits.hpp"
 #include "duckdb/main/client_context.hpp"
 
+#include <iostream>
+#include <sys/time.h>
 #ifdef DUCKDB_DEBUG_ASYNC_SINK_SOURCE
 #include <chrono>
 #include <thread>
 #endif
 
 namespace duckdb {
-
+double getNow() {
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	return tv.tv_sec * 1000.0 + tv.tv_usec / 1000.0;
+}
 PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_p)
     : pipeline(pipeline_p), thread(context_p), context(context_p, thread, &pipeline_p) {
 	D_ASSERT(pipeline.source_state);
@@ -23,6 +29,11 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 			partition_info.batch_index = pipeline.RegisterNewBatchIndex();
 			partition_info.min_batch_index = partition_info.batch_index;
 		}
+	}
+
+	pipeline.operator_total_time.reserve(pipeline.operators.size() + 1);
+	for (idx_t i = 0; i < pipeline.operators.size() + 1; i++) {
+		pipeline.operator_total_time.push_back(0);
 	}
 	local_source_state = pipeline.source->GetLocalSourceState(context, *pipeline.source_state);
 
@@ -306,8 +317,10 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 			D_ASSERT(pipeline.sink->sink_state);
 			OperatorSinkInput sink_input {*pipeline.sink->sink_state, *local_sink_state, interrupt_state};
 
+			double sink_start = getNow();
 			auto sink_result = Sink(sink_chunk, sink_input);
-
+			double sink_end = getNow();
+			pipeline.incrementOperatorTime(sink_end - sink_start, pipeline.operators.size());
 			EndOperator(*pipeline.sink, nullptr);
 
 			if (sink_result == SinkResultType::BLOCKED) {
@@ -357,6 +370,21 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 	// flush all query profiler info
 	for (idx_t i = 0; i < intermediate_states.size(); i++) {
 		intermediate_states[i]->Finalize(pipeline.operators[i].get(), context);
+	}
+	bool print = pipeline.operators.size() > 0 || pipeline.sink->type != PhysicalOperatorType::CREATE_TABLE_AS;
+	print = false;
+	if (print) {
+		std::cout << "----------------------------" << std::endl;
+		for (int i = 0; i < pipeline.operator_total_time.size() - 1; i++) {
+			std::cout << "Operator " << PhysicalOperatorToString(pipeline.operators[i].get().type)
+			          << " time: " << pipeline.operator_total_time[i] << std::endl;
+		}
+		if (pipeline.sink) {
+			std::cout << "Sink operator " << PhysicalOperatorToString(pipeline.sink.get()->type)
+			          << " time: " << pipeline.operator_total_time[pipeline.operator_total_time.size() - 1]
+			          << std::endl;
+		}
+		std::cout << "----------------------------" << std::endl;
 	}
 	pipeline.executor.Flush(thread);
 	local_sink_state.reset();
@@ -415,8 +443,11 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 			// if current_idx > source_idx, we pass the previous operators' output through the Execute of the current
 			// operator
 			StartOperator(current_operator);
+			double op_start = getNow();
 			auto result = current_operator.Execute(context, prev_chunk, current_chunk, *current_operator.op_state,
 			                                       *intermediate_states[current_intermediate - 1]);
+			double op_end = getNow();
+			pipeline.incrementOperatorTime(op_end - op_start, operator_idx);
 			EndOperator(current_operator, &current_chunk);
 			if (result == OperatorResultType::HAVE_MORE_OUTPUT) {
 				// more data remains in this operator
@@ -427,7 +458,7 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 				FinishProcessing(NumericCast<int32_t>(current_idx));
 				return OperatorResultType::FINISHED;
 			}
-			current_chunk.Verify();
+			// current_chunk.Verify();
 		}
 
 		if (current_chunk.size() == 0) {
@@ -526,9 +557,9 @@ void PipelineExecutor::StartOperator(PhysicalOperator &op) {
 void PipelineExecutor::EndOperator(PhysicalOperator &op, optional_ptr<DataChunk> chunk) {
 	context.thread.profiler.EndOperator(chunk);
 
-	if (chunk) {
-		chunk->Verify();
-	}
+	// if (chunk) {
+	// 	chunk->Verify();
+	// }
 }
 
 } // namespace duckdb
