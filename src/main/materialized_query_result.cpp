@@ -17,13 +17,15 @@ MaterializedQueryResult::MaterializedQueryResult(StatementType statement_type, S
 MaterializedQueryResult::MaterializedQueryResult(ErrorData error)
     : QueryResult(QueryResultType::MATERIALIZED_RESULT, std::move(error)), scan_initialized(false) {
 }
-
+int64_t MaterializedQueryResult::GetRowNumber() {
+	return collection->Count();
+}
 string MaterializedQueryResult::ToString() {
 	string result;
 	if (success) {
 		result = HeaderToString();
 		result += "[ Rows: " + to_string(collection->Count()) + "]\n";
-		auto &coll = Collection();
+		// auto &coll = Collection();
 		// for (auto &row : coll.Rows()) {
 		// 	for (idx_t col_idx = 0; col_idx < coll.ColumnCount(); col_idx++) {
 		// 		if (col_idx > 0) {

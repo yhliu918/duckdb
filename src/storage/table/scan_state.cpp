@@ -167,7 +167,7 @@ bool CollectionScanState::Select(DuckTransaction &transaction, DataChunk &result
 		auto rowid = sel[i];
 		// std::cout << rowid << std::endl;
 		// auto row_group = row_groups->GetSegment(rowid);
-		auto row_group = row_groups->GetSegmentNode(rowid / 122880);
+		auto row_group = row_groups->GetSegmentNode(rowid / STANDARD_ROW_GROUPS_SIZE);
 		row_group->GetScalar(transaction, *this, result, rowid, project_column_ids, i, cfs);
 	}
 	return true;

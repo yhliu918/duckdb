@@ -649,7 +649,8 @@ void RowGroup::GetScalar(TransactionData transaction, CollectionScanState &state
                          std::unordered_map<int64_t, int64_t> &project_column_ids, int64_t result_rowid,
                          ColumnFetchState &cfs) {
 	for (auto [col_idx, result_col_idx] : project_column_ids) {
-		auto &column_data = GetColumn(col_idx);
+		// auto &column_data = GetColumn(col_idx);
+		auto &column_data = *columns[col_idx];
 		column_data.FetchRow(transaction, cfs, row_id, result.data[result_col_idx], result_rowid);
 	}
 }

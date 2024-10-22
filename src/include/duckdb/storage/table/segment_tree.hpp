@@ -15,6 +15,7 @@
 #include "duckdb/storage/storage_lock.hpp"
 #include "duckdb/storage/table/segment_lock.hpp"
 
+#include <iostream>
 namespace duckdb {
 
 template <class T>
@@ -136,6 +137,38 @@ public:
 		return nodes[GetSegmentIndex(l, row_number)].node.get();
 	}
 	T *GetSegmentNode(idx_t node_idx) {
+		return nodes[node_idx].node.get();
+	}
+	T *GetSegmentNode(idx_t node_idx, idx_t row_id) {
+		// if (nodes.size() != 1) {
+		// 	if (row_id >= 623) {
+		// 		node_idx = 1;
+		// 	}
+		// }
+		// for (idx_t i = 0; i < nodes.size(); i++) {
+		// 	std::cout << nodes[i].row_start << " " << nodes[i].node->count << std::endl;
+		// 	// std::cout << nodes[i].node->SegmentSize() << std::endl;
+		// }
+		if (nodes[0].node->type_size >= 16) {
+			// fix me: string column
+			// binary search upon start_index
+			idx_t lower = 0;
+			idx_t upper = start_index.size() - 1;
+			while (lower <= upper) {
+				idx_t index = (lower + upper) / 2;
+				if (row_id < start_index[index]) {
+					upper = index - 1;
+				} else if (row_id >= start_index[index] + nodes[index].node->count) {
+					lower = index + 1;
+				} else {
+					node_idx = index;
+					break;
+				}
+			}
+			return nodes[node_idx].node.get();
+		}
+
+		node_idx = node_idx / ((DEFAULT_BLOCK_ALLOC_SIZE - 8) / nodes[0].node->type_size);
 		return nodes[node_idx].node.get();
 	}
 
@@ -264,6 +297,8 @@ public:
 				throw InternalException("In SegmentTree::Reinitialize - gap found between nodes!");
 			}
 			entry.row_start = offset;
+			start_index.push_back(entry.row_start);
+			// std::cout << "reinitialized " << entry.row_start << std::endl;
 			offset += entry.node->count;
 		}
 	}
@@ -279,6 +314,7 @@ protected:
 private:
 	//! The nodes in the tree, can be binary searched
 	vector<SegmentNode<T>> nodes;
+	vector<idx_t> start_index;
 	//! Lock to access or modify the nodes
 	mutex node_lock;
 

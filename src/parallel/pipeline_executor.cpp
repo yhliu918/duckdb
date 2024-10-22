@@ -440,6 +440,7 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 		}
 	}
 	bool print = pipeline.operators.size() > 0 || pipeline.sink->type != PhysicalOperatorType::CREATE_TABLE_AS;
+	print = false;
 	if (print) {
 		std::cout << "----------------------------" << std::endl;
 		for (int i = 0; i < pipeline.operator_total_time.size() - 1; i++) {
