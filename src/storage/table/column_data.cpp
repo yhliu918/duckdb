@@ -488,7 +488,7 @@ void ColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, 
 	segment->FetchRow(state, row_id, result, result_idx);
 	// merge any updates made to this row
 
-	// FetchUpdateRow(transaction, row_id, result, result_idx);
+	FetchUpdateRow(transaction, row_id, result, result_idx);
 }
 
 void ColumnData::Update(TransactionData transaction, idx_t column_index, Vector &update_vector, row_t *row_ids,
