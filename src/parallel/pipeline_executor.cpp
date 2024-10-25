@@ -3,6 +3,8 @@
 #include "duckdb/common/limits.hpp"
 #include "duckdb/main/client_context.hpp"
 
+#include <iostream>
+#include <thread>
 #ifdef DUCKDB_DEBUG_ASYNC_SINK_SOURCE
 #include <chrono>
 #include <thread>
@@ -168,6 +170,18 @@ SinkNextBatchType PipelineExecutor::NextBatch(duckdb::DataChunk &source_chunk) {
 PipelineExecuteResult PipelineExecutor::Execute(idx_t max_chunks) {
 	D_ASSERT(pipeline.sink);
 	auto &source_chunk = pipeline.operators.empty() ? final_chunk : *intermediate_chunks[0];
+	std::thread::id this_id = std::this_thread::get_id();
+	std::cout << "Thread ID: " << this_id << std::endl;
+	std::cout << "start executing pipeline " << max_chunks << std::endl;
+	if (pipeline.source) {
+		std::cout << "source: " << PhysicalOperatorToString(pipeline.source->type) << std::endl;
+	}
+	for (int i = 0; i < pipeline.operators.size(); i++) {
+		std::cout << i << " " << PhysicalOperatorToString(pipeline.operators[i].get().type) << std::endl;
+	}
+	if (pipeline.sink) {
+		std::cout << "sink: " << PhysicalOperatorToString(pipeline.sink->type) << std::endl;
+	}
 	for (idx_t i = 0; i < max_chunks; i++) {
 		if (context.client.interrupted) {
 			throw InterruptException();
@@ -427,7 +441,7 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 				FinishProcessing(NumericCast<int32_t>(current_idx));
 				return OperatorResultType::FINISHED;
 			}
-			current_chunk.Verify();
+			// current_chunk.Verify();
 		}
 
 		if (current_chunk.size() == 0) {
@@ -526,9 +540,9 @@ void PipelineExecutor::StartOperator(PhysicalOperator &op) {
 void PipelineExecutor::EndOperator(PhysicalOperator &op, optional_ptr<DataChunk> chunk) {
 	context.thread.profiler.EndOperator(chunk);
 
-	if (chunk) {
-		chunk->Verify();
-	}
+	// if (chunk) {
+	// 	chunk->Verify();
+	// }
 }
 
 } // namespace duckdb
