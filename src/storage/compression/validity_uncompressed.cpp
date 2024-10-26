@@ -383,6 +383,7 @@ void ValidityFetchRow(ColumnSegment &segment, ColumnFetchState &state, row_t row
 	// auto &buffer_manager = BufferManager::GetBufferManager(segment.db);
 	// auto handle = buffer_manager.Pin(segment.block);
 	// auto dataptr = handle.Ptr() + segment.GetBlockOffset();
+	// fix me: currently disabling the validity map
 	auto dataptr = segment.block->buffer->buffer + segment.GetBlockOffset();
 	ValidityMask mask(reinterpret_cast<validity_t *>(dataptr));
 	auto &result_mask = FlatVector::Validity(result);
