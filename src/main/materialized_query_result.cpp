@@ -18,7 +18,7 @@ MaterializedQueryResult::MaterializedQueryResult(ErrorData error)
     : QueryResult(QueryResultType::MATERIALIZED_RESULT, std::move(error)), scan_initialized(false) {
 }
 int64_t MaterializedQueryResult::GetRowNumber() {
-	return collection->Count();
+	return collection ? collection->Count() : 0;
 }
 string MaterializedQueryResult::ToString() {
 	string result;

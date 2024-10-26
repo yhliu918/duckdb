@@ -47,10 +47,14 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 			pipeline.thread_num = num;
 		}
 	}
-	pipeline.operator_total_time.reserve(pipeline.operators.size() + 1);
-	for (idx_t i = 0; i < pipeline.operators.size() + 1; i++) {
-		pipeline.operator_total_time.push_back(0);
+	pipeline.mat_lock.lock();
+	if (pipeline.operator_total_time.empty()) {
+		pipeline.operator_total_time.reserve(pipeline.operators.size() + 1);
+		for (idx_t i = 0; i < pipeline.operators.size() + 1; i++) {
+			pipeline.operator_total_time.push_back(0);
+		}
 	}
+	pipeline.mat_lock.unlock();
 
 	local_source_state = pipeline.source->GetLocalSourceState(context, *pipeline.source_state);
 
@@ -61,11 +65,13 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 		if (pipeline.operators[i].get().type == PhysicalOperatorType::HASH_JOIN) {
 			auto &state = pipeline.operators[i].get().sink_state->Cast<HashJoinGlobalSinkState>();
 			if (state.mat_table && state.source_state) {
+				pipeline.mat_lock.lock();
 				if (pipeline.thread_num == num) {
-					pipeline.thread_num--;
 					pipeline.SetMaterializeSource(move(state.mat_table), state.source, move(state.source_state),
 					                              move(state.local_source_state));
 				}
+				pipeline.thread_num--;
+				pipeline.mat_lock.unlock();
 			}
 
 			mat_flag = true;
@@ -235,6 +241,7 @@ PipelineExecuteResult PipelineExecutor::Execute(idx_t max_chunks) {
 	D_ASSERT(pipeline.sink);
 	auto &source_chunk = pipeline.operators.empty() ? final_chunk : *intermediate_chunks[0];
 	for (idx_t i = 0; i < max_chunks; i++) {
+		double start = getNow();
 		if (context.client.interrupted) {
 			throw InterruptException();
 		}
@@ -303,6 +310,8 @@ PipelineExecuteResult PipelineExecutor::Execute(idx_t max_chunks) {
 		if (result == OperatorResultType::FINISHED) {
 			break;
 		}
+		double end = getNow();
+		pipeline.total_time += end - start;
 	}
 
 	if ((!exhausted_source || !done_flushing) && !IsFinished()) {
@@ -427,6 +436,7 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 	for (idx_t i = 0; i < intermediate_states.size(); i++) {
 		intermediate_states[i]->Finalize(pipeline.operators[i].get(), context);
 	}
+	pipeline.mat_lock.lock();
 	if (pipeline.sink->type == PhysicalOperatorType::HASH_JOIN) {
 		pipeline.thread_num--;
 		if (pipeline.thread_num == 0) {
@@ -439,8 +449,9 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 			    pipeline.source, move(pipeline.source_state), move(local_source_state));
 		}
 	}
+	pipeline.mat_lock.unlock();
 	bool print = pipeline.operators.size() > 0 || pipeline.sink->type != PhysicalOperatorType::CREATE_TABLE_AS;
-	print = false;
+	// print = false;
 	if (print) {
 		std::cout << "----------------------------" << std::endl;
 		for (int i = 0; i < pipeline.operator_total_time.size() - 1; i++) {
@@ -456,7 +467,9 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 			std::cout << "Materialize operator time: " << pipeline.mat_operator_time << std::endl;
 		}
 		std::cout << "----------------------------" << std::endl;
+		std::cout << "Total time: " << pipeline.total_time << std::endl;
 	}
+
 	pipeline.executor.Flush(thread);
 	local_sink_state.reset();
 	return PipelineExecuteResult::FINISHED;

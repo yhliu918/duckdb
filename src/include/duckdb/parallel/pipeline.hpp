@@ -136,13 +136,16 @@ public:
 	}
 
 	bool materialize_flag = false;
+	std::mutex mat_lock;
 	int thread_num = 0;
-	void incrementOperatorTime(double time, int op_idx){
+	void incrementOperatorTime(double time, int op_idx) {
 		operator_total_time[op_idx] += time;
 	}
 
 	vector<double> operator_total_time;
 	double mat_operator_time = 0;
+	double total_time = 0;
+
 private:
 	//! Whether or not the pipeline has been readied
 	bool ready;
