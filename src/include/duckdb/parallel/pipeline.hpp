@@ -125,6 +125,8 @@ public:
 	}
 
 	vector<double> operator_total_time;
+	std::mutex lock;
+	double total_time = 0;
 
 private:
 	//! Whether or not the pipeline has been readied

@@ -3,13 +3,12 @@
 #include "duckdb/common/limits.hpp"
 #include "duckdb/main/client_context.hpp"
 
-#include <iostream>
-#include <sys/time.h>
 #ifdef DUCKDB_DEBUG_ASYNC_SINK_SOURCE
 #include <chrono>
 #include <thread>
 #endif
-
+#include <iostream>
+#include <sys/time.h>
 namespace duckdb {
 double getNow() {
 	struct timeval tv;
@@ -30,11 +29,14 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 			partition_info.min_batch_index = partition_info.batch_index;
 		}
 	}
-
-	pipeline.operator_total_time.reserve(pipeline.operators.size() + 1);
-	for (idx_t i = 0; i < pipeline.operators.size() + 1; i++) {
-		pipeline.operator_total_time.push_back(0);
+	pipeline.lock.lock();
+	if (pipeline.operator_total_time.empty()) {
+		pipeline.operator_total_time.reserve(pipeline.operators.size() + 1);
+		for (idx_t i = 0; i < pipeline.operators.size() + 1; i++) {
+			pipeline.operator_total_time.push_back(0);
+		}
 	}
+	pipeline.lock.unlock();
 	local_source_state = pipeline.source->GetLocalSourceState(context, *pipeline.source_state);
 
 	intermediate_chunks.reserve(pipeline.operators.size());
@@ -180,6 +182,7 @@ PipelineExecuteResult PipelineExecutor::Execute(idx_t max_chunks) {
 	D_ASSERT(pipeline.sink);
 	auto &source_chunk = pipeline.operators.empty() ? final_chunk : *intermediate_chunks[0];
 	for (idx_t i = 0; i < max_chunks; i++) {
+		double start = getNow();
 		if (context.client.interrupted) {
 			throw InterruptException();
 		}
@@ -248,6 +251,8 @@ PipelineExecuteResult PipelineExecutor::Execute(idx_t max_chunks) {
 		if (result == OperatorResultType::FINISHED) {
 			break;
 		}
+		double end = getNow();
+		pipeline.total_time += end - start;
 	}
 
 	if ((!exhausted_source || !done_flushing) && !IsFinished()) {
@@ -321,6 +326,7 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 			auto sink_result = Sink(sink_chunk, sink_input);
 			double sink_end = getNow();
 			pipeline.incrementOperatorTime(sink_end - sink_start, pipeline.operators.size());
+
 			EndOperator(*pipeline.sink, nullptr);
 
 			if (sink_result == SinkResultType::BLOCKED) {
@@ -372,7 +378,7 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 		intermediate_states[i]->Finalize(pipeline.operators[i].get(), context);
 	}
 	bool print = pipeline.operators.size() > 0 || pipeline.sink->type != PhysicalOperatorType::CREATE_TABLE_AS;
-	print = false;
+	// print = false;
 	if (print) {
 		std::cout << "----------------------------" << std::endl;
 		for (int i = 0; i < pipeline.operator_total_time.size() - 1; i++) {
@@ -385,7 +391,9 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 			          << std::endl;
 		}
 		std::cout << "----------------------------" << std::endl;
+		std::cout << "Total time: " << pipeline.total_time << std::endl;
 	}
+
 	pipeline.executor.Flush(thread);
 	local_sink_state.reset();
 
