@@ -93,7 +93,8 @@ public:
 	void Scan(DuckTransaction &transaction, DataChunk &result, TableScanState &state);
 
 	void Select(DuckTransaction &transaction, DataChunk &result, TableScanState &state, idx_t rowid_col_idx,
-	            std::unordered_map<int64_t, int64_t> &project_column_ids);
+	            std::unordered_map<int64_t, int64_t> &project_column_ids,
+	            std::unordered_map<int64_t, int32_t> &fixed_len_strings_columns);
 	//! Fetch data from the specific row identifiers from the base table
 	void Fetch(DuckTransaction &transaction, DataChunk &result, const vector<column_t> &column_ids,
 	           const Vector &row_ids, idx_t fetch_count, ColumnFetchState &state);

@@ -103,18 +103,24 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 			std::ifstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/config", std::ios::in);
 			unordered_map<int64_t, int64_t> col_map;
 			map<int64_t, int8_t> col_types;
+			unordered_map<int64_t, int32_t> fixed_len_strings_columns;
 			if (file.is_open()) {
 				idx_t table_col_idx;
 				idx_t result_col_idx;
 				int logical_type;
+				int string_length;
 
 				while (file >> table_col_idx >> result_col_idx >> logical_type) {
 					col_map[table_col_idx] = result_col_idx;
 					col_types[result_col_idx] = logical_type;
+					if (LogicalTypeId(logical_type) == LogicalTypeId::VARCHAR) {
+						file >> string_length;
+						fixed_len_strings_columns[result_col_idx] = string_length;
+					}
 				}
 				file.close();
 			}
-			pipeline.SetMaterializeMap(col_map, col_types);
+			pipeline.SetMaterializeMap(col_map, col_types, fixed_len_strings_columns);
 		}
 	}
 	InitializeChunk(final_chunk);
@@ -538,7 +544,8 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 				                                    interrupt_state,
 				                                    true,
 				                                    1,
-				                                    pipeline.materialize_column_ids};
+				                                    pipeline.materialize_column_ids,
+				                                    pipeline.fixed_len_strings_columns};
 
 				// result.ReferenceColumns(current_chunk, {0, 1});
 				for (idx_t col_idx = 0; col_idx < current_chunk.ColumnCount(); col_idx++) {

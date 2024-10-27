@@ -158,7 +158,8 @@ CollectionScanState::CollectionScanState(TableScanState &parent_p)
       valid_sel(STANDARD_VECTOR_SIZE), parent(parent_p) {
 }
 bool CollectionScanState::Select(DuckTransaction &transaction, DataChunk &result, idx_t rowid_col_idx,
-                                 std::unordered_map<int64_t, int64_t> &project_column_ids) {
+                                 std::unordered_map<int64_t, int64_t> &project_column_ids,
+                                 std::unordered_map<int64_t, int32_t> &fixed_len_strings_columns) {
 	auto sel_vec = result.data[rowid_col_idx];
 	auto cfs = ColumnFetchState();
 	int64_t *sel = reinterpret_cast<int64_t *>(sel_vec.GetData());
@@ -168,7 +169,7 @@ bool CollectionScanState::Select(DuckTransaction &transaction, DataChunk &result
 		// std::cout << rowid << std::endl;
 		// auto row_group = row_groups->GetSegment(rowid);
 		auto row_group = row_groups->GetSegmentNode(rowid / STANDARD_ROW_GROUPS_SIZE);
-		row_group->GetScalar(transaction, *this, result, rowid, project_column_ids, i, cfs);
+		row_group->GetScalar(transaction, *this, result, rowid, project_column_ids, fixed_len_strings_columns, i, cfs);
 	}
 	return true;
 }

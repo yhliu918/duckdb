@@ -173,6 +173,7 @@ struct OperatorSourceInput {
 	bool materialize_flag;
 	int64_t rowid_column_id;
 	unordered_map<int64_t, int64_t> materialize_col_id;
+	unordered_map<int64_t, int32_t> fixed_len_strings_columns;
 };
 
 struct OperatorSinkCombineInput {

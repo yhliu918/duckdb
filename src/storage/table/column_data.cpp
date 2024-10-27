@@ -480,11 +480,27 @@ idx_t ColumnData::Fetch(ColumnScanState &state, row_t row_id, Vector &result) {
 	state.internal_index = state.current->start;
 	return ScanVector(state, result, STANDARD_VECTOR_SIZE, ScanVectorType::SCAN_FLAT_VECTOR);
 }
-
 void ColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, row_t row_id, Vector &result,
                           idx_t result_idx) {
+	auto segment = data.GetSegment(UnsafeNumericCast<idx_t>(row_id));
+	// now perform the fetch within the segment
+	segment->FetchRow(state, row_id, result, result_idx);
+	// merge any updates made to this row
+
+	// FetchUpdateRow(transaction, row_id, result, result_idx);
+}
+
+void ColumnData::FetchRowNew(TransactionData transaction, ColumnFetchState &state, row_t row_id, Vector &result,
+                             idx_t result_idx, int32_t string_size) {
 	// auto segment = data.GetSegment(UnsafeNumericCast<idx_t>(row_id));
-	auto segment = data.GetSegmentNode((row_id % STANDARD_ROW_GROUPS_SIZE), row_id);
+	// __builtin_prefetch(&data.start_index, 0, 3);
+	ColumnSegment *segment = nullptr;
+	if (string_size != 0 || (data.nodes[0].node->function.get().type == CompressionType::COMPRESSION_UNCOMPRESSED &&
+	                         data.nodes[0].node->type.InternalType() != PhysicalType::VARCHAR)) {
+		segment = data.GetSegmentNode_fixed((row_id % STANDARD_ROW_GROUPS_SIZE), row_id, string_size);
+	} else {
+		segment = data.GetSegmentNode((row_id % STANDARD_ROW_GROUPS_SIZE), row_id);
+	}
 	// now perform the fetch within the segment
 	segment->FetchRow(state, row_id, result, result_idx);
 	// merge any updates made to this row

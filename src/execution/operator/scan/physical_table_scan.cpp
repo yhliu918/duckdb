@@ -95,7 +95,7 @@ SourceResultType PhysicalTableScan::GetData(ExecutionContext &context, DataChunk
 	auto &state = input.local_state.Cast<TableScanLocalSourceState>();
 	bool mat_flag = input.materialize_flag;
 	TableFunctionInput data(bind_data.get(), state.local_state.get(), gstate.global_state.get(), mat_flag,
-	                        input.rowid_column_id, input.materialize_col_id);
+	                        input.rowid_column_id, input.materialize_col_id, input.fixed_len_strings_columns);
 	if (function.function) {
 		function.function(context.client, data, chunk);
 	} else {

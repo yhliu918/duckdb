@@ -139,36 +139,31 @@ public:
 	T *GetSegmentNode(idx_t node_idx) {
 		return nodes[node_idx].node.get();
 	}
-	T *GetSegmentNode(idx_t node_idx, idx_t row_id) {
-		// if (nodes.size() != 1) {
-		// 	if (row_id >= 623) {
-		// 		node_idx = 1;
-		// 	}
-		// }
-		// for (idx_t i = 0; i < nodes.size(); i++) {
-		// 	std::cout << nodes[i].row_start << " " << nodes[i].node->count << std::endl;
-		// 	// std::cout << nodes[i].node->SegmentSize() << std::endl;
-		// }
-		if (nodes[0].node->type_size >= 16) {
-			// fix me: string column
-			// binary search upon start_index
-			idx_t lower = 0;
-			idx_t upper = start_index.size() - 1;
-			while (lower <= upper) {
-				idx_t index = (lower + upper) / 2;
-				if (row_id < start_index[index]) {
-					upper = index - 1;
-				} else if (row_id >= start_index[index] + nodes[index].node->count) {
-					lower = index + 1;
-				} else {
-					node_idx = index;
-					break;
-				}
+	T *GetSegmentNode_sequential(idx_t node_idx, idx_t row_id) {
+		node_idx = start_index.size() - 1;
+		for (int i = 0; i < start_index.size(); i++) {
+			if (row_id < start_index[i]) {
+				node_idx = i - 1;
+				break;
 			}
-			return nodes[node_idx].node.get();
 		}
+		return nodes[node_idx].node.get();
+	}
+	T *GetSegmentNode(idx_t node_idx, idx_t row_id) {
+		auto it = std::lower_bound(start_index.begin(), start_index.end(), row_id);
+		if (it == start_index.end() || (it != start_index.begin() && *it > row_id)) {
+			--it;
+		}
+		node_idx = std::distance(start_index.begin(), it);
+		return nodes[node_idx].node.get();
+	}
 
-		node_idx = node_idx / ((DEFAULT_BLOCK_ALLOC_SIZE - 8) / nodes[0].node->type_size);
+	T *GetSegmentNode_fixed(idx_t node_idx, idx_t row_id, int32_t string_size) {
+		if (string_size) {
+			node_idx = node_idx / ((DEFAULT_BLOCK_ALLOC_SIZE - 8) / (string_size + sizeof(int32_t)));
+		} else {
+			node_idx = node_idx / ((DEFAULT_BLOCK_ALLOC_SIZE - 8) / nodes[0].node->type_size);
+		}
 		return nodes[node_idx].node.get();
 	}
 
@@ -182,6 +177,9 @@ public:
 		SegmentNode<T> node;
 		segment->index = nodes.size();
 		node.row_start = segment->start;
+		if (segment->start < MAX_ROW_ID) {
+			start_index.push_back(segment->start);
+		}
 		node.node = std::move(segment);
 		nodes.push_back(std::move(node));
 	}
@@ -311,10 +309,11 @@ protected:
 		return nullptr;
 	}
 
-private:
+public:
+	vector<idx_t> start_index;
+
 	//! The nodes in the tree, can be binary searched
 	vector<SegmentNode<T>> nodes;
-	vector<idx_t> start_index;
 	//! Lock to access or modify the nodes
 	mutex node_lock;
 

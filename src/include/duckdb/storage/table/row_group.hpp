@@ -116,7 +116,8 @@ public:
 	bool CheckZonemapSegments(CollectionScanState &state);
 	void Scan(TransactionData transaction, CollectionScanState &state, DataChunk &result);
 	void GetScalar(TransactionData transaction, CollectionScanState &state, DataChunk &result, uint64_t row_id,
-	               std::unordered_map<int64_t, int64_t> &project_column_ids, int64_t result_rowid,
+	               std::unordered_map<int64_t, int64_t> &project_column_ids,
+	               std::unordered_map<int64_t, int32_t> &fixed_len_strings_columns, int64_t result_rowid,
 	               ColumnFetchState &cfs);
 	void GetScalarCol(TransactionData transaction, CollectionScanState &state, Vector &result, uint64_t row_id,
 	                  int64_t col_idx, int64_t result_rowid, ColumnFetchState &cfs);
