@@ -187,12 +187,6 @@ bool CollectionScanState::SelectCol(DuckTransaction &transaction, DataChunk &res
 			row_group->GetScalarCol(transaction, *this, result_vec, rowid, col_idx, i, cfs);
 		}
 	}
-	// for (int64_t i = 0; i < result.size(); i++) {
-	// 	auto rowid = sel_vec.GetValue(i).GetValue<int64_t>();
-	// 	// std::cout << rowid << std::endl;
-	// 	auto row_group = row_groups->GetSegment(rowid);
-	// 	row_group->GetScalar(transaction, *this, result, rowid, project_column_ids, i, cfs);
-	// }
 	return true;
 }
 

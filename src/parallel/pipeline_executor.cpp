@@ -94,21 +94,20 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 		}
 	}
 	if (mat_flag) {
-		auto &last_op = pipeline.operators.empty() ? *pipeline.source : pipeline.operators.back().get();
-		auto types = last_op.GetTypes();
-		auto chunk = make_uniq<DataChunk>();
-		chunk->Initialize(Allocator::Get(context.client), types);
-		intermediate_chunks.push_back(std::move(chunk));
+
 		if (pipeline.sink->type == PhysicalOperatorType::RESULT_COLLECTOR) {
 			std::ifstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/config", std::ios::in);
 			unordered_map<int64_t, int64_t> col_map;
 			map<int64_t, int8_t> col_types;
 			unordered_map<int64_t, int32_t> fixed_len_strings_columns;
+			int rowid_col_idx;
 			if (file.is_open()) {
 				idx_t table_col_idx;
 				idx_t result_col_idx;
 				int logical_type;
 				int string_length;
+
+				file >> rowid_col_idx;
 
 				while (file >> table_col_idx >> result_col_idx >> logical_type) {
 					col_map[table_col_idx] = result_col_idx;
@@ -120,7 +119,16 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 				}
 				file.close();
 			}
-			pipeline.SetMaterializeMap(col_map, col_types, fixed_len_strings_columns);
+			if (!col_map.empty()) {
+				pipeline.SetMaterializeMap(rowid_col_idx, col_map, col_types, fixed_len_strings_columns);
+			}
+		}
+		if (pipeline.materialize_flag) {
+			auto &last_op = pipeline.operators.empty() ? *pipeline.source : pipeline.operators.back().get();
+			auto types = last_op.GetTypes();
+			auto chunk = make_uniq<DataChunk>();
+			chunk->Initialize(Allocator::Get(context.client), types);
+			intermediate_chunks.push_back(std::move(chunk));
 		}
 	}
 	InitializeChunk(final_chunk);
@@ -543,7 +551,7 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 				                                    *pipeline.materialize_local_source_state,
 				                                    interrupt_state,
 				                                    true,
-				                                    1,
+				                                    pipeline.rowid_col_idx,
 				                                    pipeline.materialize_column_ids,
 				                                    pipeline.fixed_len_strings_columns};
 

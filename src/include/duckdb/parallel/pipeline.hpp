@@ -129,11 +129,12 @@ public:
 		materialize_local_source_state = move(local_state);
 	}
 
-	void SetMaterializeMap(unordered_map<int64_t, int64_t> colid, map<int64_t, int8_t> types,
-	                       unordered_map<int64_t, int32_t> fixed_len_strings_columns) {
+	void SetMaterializeMap(int col_idx, unordered_map<int64_t, int64_t> colid, map<int64_t, int8_t> types,
+	                       unordered_map<int64_t, int32_t> string_columns) {
+		rowid_col_idx = col_idx;
 		materialize_column_ids = move(colid);
 		materialize_column_types = move(types);
-		fixed_len_strings_columns = move(fixed_len_strings_columns);
+		fixed_len_strings_columns = move(string_columns);
 		materialize_flag = true;
 	}
 
@@ -163,6 +164,7 @@ private:
 	unordered_map<int64_t, int64_t> materialize_column_ids;
 	map<int64_t, int8_t> materialize_column_types;
 	unordered_map<int64_t, int32_t> fixed_len_strings_columns;
+	int rowid_col_idx;
 
 	//! The chain of intermediate operators
 	vector<reference<PhysicalOperator>> operators;
