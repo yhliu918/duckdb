@@ -155,12 +155,14 @@ public:
 			--it;
 		}
 		node_idx = std::distance(start_index.begin(), it);
+		// std::cout << row_id << "  " << nodes[node_idx].row_start << std::endl;
 		return nodes[node_idx].node.get();
 	}
 
 	T *GetSegmentNode_fixed(idx_t node_idx, idx_t row_id, int32_t string_size) {
 		if (string_size) {
-			node_idx = node_idx / ((DEFAULT_BLOCK_ALLOC_SIZE - 8) / (string_size + sizeof(int32_t)));
+			// block header and dictionary header
+			node_idx = node_idx / ((DEFAULT_BLOCK_ALLOC_SIZE - 8 - 8) / (string_size + sizeof(int32_t)));
 		} else {
 			node_idx = node_idx / ((DEFAULT_BLOCK_ALLOC_SIZE - 8) / nodes[0].node->type_size);
 		}
@@ -295,7 +297,10 @@ public:
 				throw InternalException("In SegmentTree::Reinitialize - gap found between nodes!");
 			}
 			entry.row_start = offset;
-			start_index.push_back(entry.row_start);
+			if (entry.row_start < MAX_ROW_ID) {
+				start_index.push_back(entry.row_start);
+			}
+			// start_index.push_back(entry.row_start);
 			// std::cout << "reinitialized " << entry.row_start << std::endl;
 			offset += entry.node->count;
 		}

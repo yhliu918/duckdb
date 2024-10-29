@@ -43,6 +43,7 @@ def gen_build_key(size):
     global non_heavy_hitter
     heavy_hitter = np.random.choice(unique_build_key, int(len(unique_build_key)*heavy_hitter_portion), replace=False)
     non_heavy_hitter = np.setdiff1d(unique_build_key, heavy_hitter)
+    np.random.shuffle(join_key)
     print(f"unique_build_key: {len(unique_build_key)}, non_hit_unique_key: {len(non_hit_unique_key)}")
     return join_key
 
@@ -141,8 +142,27 @@ data_path = '/home/yihao/data_gen/probe{}_build{}_sel{}_skew{}_{}_payload{}_{}'.
 if not os.path.exists(data_path):
     os.makedirs(data_path)
 else:
-    print("data path already exists")
-pq.write_table(build_pa_table, data_path+"/build.parquet")
-pq.write_table(probe_pa_table, data_path+"/probe.parquet")
+    os.system(f"rm -r {data_path}")
+    os.makedirs(data_path)
+row_group_size = 1228800
+pq.write_table(build_pa_table, data_path+"/build.parquet",row_group_size=row_group_size)
+pq.write_table(probe_pa_table, data_path+"/probe.parquet",row_group_size=row_group_size)
+
+idx = 2
+result_idx = 1
+with open(data_path+"/config", "w") as f:
+    for [type_, size] in payload_config.items():
+        match type_:
+            case 0:
+                f.write(f"{idx} {result_idx} 13\n")
+            case 1:
+                f.write(f"{idx} {result_idx} 14\n")
+            case 2:
+                f.write(f"{idx} {result_idx} 25 {size}\n")
+            case 3:
+                f.write(f"{idx} {result_idx} 25\n")
+        idx+=1
+        result_idx+=1
+    
 
 # df.to_parquet('output.parquet', engine='pyarrow')

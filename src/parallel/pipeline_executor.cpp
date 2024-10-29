@@ -10,6 +10,7 @@
 #include <fstream>
 #include <iostream>
 #include <sys/time.h>
+#include <thread>
 
 #ifdef DUCKDB_DEBUG_ASYNC_SINK_SOURCE
 #include <chrono>
@@ -60,21 +61,48 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 
 	intermediate_chunks.reserve(pipeline.operators.size());
 	intermediate_states.reserve(pipeline.operators.size());
-	bool mat_flag = false;
 	for (idx_t i = 0; i < pipeline.operators.size(); i++) {
 		if (pipeline.operators[i].get().type == PhysicalOperatorType::HASH_JOIN) {
 			auto &state = pipeline.operators[i].get().sink_state->Cast<HashJoinGlobalSinkState>();
+			pipeline.mat_lock.lock();
 			if (state.mat_table && state.source_state) {
-				pipeline.mat_lock.lock();
+
 				if (pipeline.thread_num == num) {
+					pipeline.thread_num--;
 					pipeline.SetMaterializeSource(move(state.mat_table), state.source, move(state.source_state),
 					                              move(state.local_source_state));
-				}
-				pipeline.thread_num--;
-				pipeline.mat_lock.unlock();
-			}
+					if (pipeline.sink->type == PhysicalOperatorType::RESULT_COLLECTOR) {
+						std::ifstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/config", std::ios::in);
+						unordered_map<int64_t, int64_t> col_map;
+						map<int64_t, int8_t> col_types;
+						unordered_map<int64_t, int32_t> fixed_len_strings_columns;
+						int rowid_col_idx;
+						if (file.is_open()) {
+							idx_t table_col_idx;
+							idx_t result_col_idx;
+							int logical_type;
+							int string_length = 0;
 
-			mat_flag = true;
+							file >> rowid_col_idx;
+
+							while (file >> table_col_idx >> result_col_idx >> logical_type) {
+								col_map[table_col_idx] = result_col_idx;
+								col_types[result_col_idx] = logical_type;
+								if (LogicalTypeId(logical_type) == LogicalTypeId::VARCHAR) {
+									file >> string_length;
+									fixed_len_strings_columns[result_col_idx] = string_length;
+								}
+							}
+							file.close();
+						}
+
+						if (!col_map.empty() && !pipeline.materialize_flag) {
+							pipeline.SetMaterializeMap(rowid_col_idx, col_map, col_types, fixed_len_strings_columns);
+						}
+					}
+				}
+			}
+			pipeline.mat_lock.unlock();
 		}
 		auto &prev_operator = i == 0 ? *pipeline.source : pipeline.operators[i - 1].get();
 		auto &current_operator = pipeline.operators[i].get();
@@ -93,44 +121,15 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 			FinishProcessing();
 		}
 	}
-	if (mat_flag) {
 
-		if (pipeline.sink->type == PhysicalOperatorType::RESULT_COLLECTOR) {
-			std::ifstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/config", std::ios::in);
-			unordered_map<int64_t, int64_t> col_map;
-			map<int64_t, int8_t> col_types;
-			unordered_map<int64_t, int32_t> fixed_len_strings_columns;
-			int rowid_col_idx;
-			if (file.is_open()) {
-				idx_t table_col_idx;
-				idx_t result_col_idx;
-				int logical_type;
-				int string_length;
-
-				file >> rowid_col_idx;
-
-				while (file >> table_col_idx >> result_col_idx >> logical_type) {
-					col_map[table_col_idx] = result_col_idx;
-					col_types[result_col_idx] = logical_type;
-					if (LogicalTypeId(logical_type) == LogicalTypeId::VARCHAR) {
-						file >> string_length;
-						fixed_len_strings_columns[result_col_idx] = string_length;
-					}
-				}
-				file.close();
-			}
-			if (!col_map.empty()) {
-				pipeline.SetMaterializeMap(rowid_col_idx, col_map, col_types, fixed_len_strings_columns);
-			}
-		}
-		if (pipeline.materialize_flag) {
-			auto &last_op = pipeline.operators.empty() ? *pipeline.source : pipeline.operators.back().get();
-			auto types = last_op.GetTypes();
-			auto chunk = make_uniq<DataChunk>();
-			chunk->Initialize(Allocator::Get(context.client), types);
-			intermediate_chunks.push_back(std::move(chunk));
-		}
+	if (pipeline.materialize_flag) {
+		auto &last_op = pipeline.operators.empty() ? *pipeline.source : pipeline.operators.back().get();
+		auto types = last_op.GetTypes();
+		auto chunk = make_uniq<DataChunk>();
+		chunk->Initialize(Allocator::Get(context.client), types);
+		intermediate_chunks.push_back(std::move(chunk));
 	}
+
 	InitializeChunk(final_chunk);
 }
 
@@ -463,7 +462,7 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 			    pipeline.source, move(pipeline.source_state), move(local_source_state));
 		}
 	}
-	pipeline.mat_lock.unlock();
+
 	bool print = pipeline.operators.size() > 0 || pipeline.sink->type != PhysicalOperatorType::CREATE_TABLE_AS;
 	// print = false;
 	if (print) {
@@ -483,6 +482,7 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 		std::cout << "----------------------------" << std::endl;
 		std::cout << "Total time: " << pipeline.total_time << std::endl;
 	}
+	pipeline.mat_lock.unlock();
 
 	pipeline.executor.Flush(thread);
 	local_sink_state.reset();
@@ -554,7 +554,12 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 				                                    pipeline.rowid_col_idx,
 				                                    pipeline.materialize_column_ids,
 				                                    pipeline.fixed_len_strings_columns};
-
+				// std::cout << std::this_thread::get_id() << " " << pipeline.materialize_column_ids.size() << " "
+				//           << pipeline.materialize_column_types.size() << " "
+				//           << (pipeline.materialize_source_state != nullptr) << " "
+				//           << (pipeline.materialize_local_source_state != nullptr) << " " <<
+				//           current_chunk.ColumnCount()
+				//           << " " << result.ColumnCount() << std::endl;
 				// result.ReferenceColumns(current_chunk, {0, 1});
 				for (idx_t col_idx = 0; col_idx < current_chunk.ColumnCount(); col_idx++) {
 					auto &other_col = current_chunk.data[col_idx];
@@ -564,6 +569,7 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 				}
 				result.SetCardinality(current_chunk.size());
 				auto res = pipeline.materialize_source->GetData(context, result, source_input);
+				// std::cout << "get data!" << result.size() << std::endl;
 				double mat_end = getNow();
 				pipeline.mat_operator_time += mat_end - mat_start;
 			}
@@ -667,9 +673,11 @@ void PipelineExecutor::InitializeChunk(DataChunk &chunk) {
 	auto types = last_op.GetTypes();
 	if (pipeline.sink) {
 		if (pipeline.sink->type == PhysicalOperatorType::RESULT_COLLECTOR && pipeline.operators.size() > 0) {
+			pipeline.mat_lock.lock();
 			for (auto &[col_id, type] : pipeline.materialize_column_types) {
 				types.push_back(LogicalType(LogicalTypeId(type)));
 			}
+			pipeline.mat_lock.unlock();
 		}
 	}
 

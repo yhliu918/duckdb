@@ -497,9 +497,10 @@ void ColumnData::FetchRowNew(TransactionData transaction, ColumnFetchState &stat
 	ColumnSegment *segment = nullptr;
 	if (string_size != 0 || (data.nodes[0].node->function.get().type == CompressionType::COMPRESSION_UNCOMPRESSED &&
 	                         data.nodes[0].node->type.InternalType() != PhysicalType::VARCHAR)) {
+		// segment = data.GetSegmentNode_fixed(((row_id % 1048576) % STANDARD_ROW_GROUPS_SIZE), row_id, string_size);
 		segment = data.GetSegmentNode_fixed((row_id % STANDARD_ROW_GROUPS_SIZE), row_id, string_size);
 	} else {
-		segment = data.GetSegmentNode((row_id % STANDARD_ROW_GROUPS_SIZE), row_id);
+		segment = data.GetSegmentNode(row_id, row_id);
 	}
 	// now perform the fetch within the segment
 	segment->FetchRow(state, row_id, result, result_idx);

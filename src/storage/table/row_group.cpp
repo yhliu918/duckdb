@@ -655,7 +655,7 @@ void RowGroup::GetScalar(TransactionData transaction, CollectionScanState &state
 			column_data.FetchRowNew(transaction, cfs, row_id, result.data[result_col_idx], result_rowid,
 			                        fixed_len_strings_columns[result_col_idx]);
 		} else {
-			column_data.FetchRowNew(transaction, cfs, row_id, result.data[result_col_idx], result_rowid);
+			column_data.FetchRowNew(transaction, cfs, row_id, result.data[result_col_idx], result_rowid, 0);
 		}
 		// auto &column_data = *columns[col_idx];
 		// column_data.FetchRow(transaction, cfs, row_id, result.data[result_col_idx], result_rowid);
