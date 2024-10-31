@@ -25,17 +25,19 @@ int main(int argc, char *argv[]) {
 	int payload_column_num = atoi(argv[8]);
 	int payload_tuple_size = atoi(argv[9]);
 	print_result = atoi(argv[10]);
+	bool sorted = atoi(argv[11]);
 
 	std::string file_path = "/home/yihao/data_gen/probe" + std::to_string(probe_size) + "_build" +
 	                        std::to_string(build_size) + "_sel" + std::to_string(selectivity) + "_skew" +
 	                        std::to_string(heavy_hitter_ratio) + "_" + std::to_string(unique_key_ratio) + "_payload" +
 	                        std::to_string(payload_column_num) + "_" + std::to_string(payload_tuple_size);
-	std::string build_file_name = "build_" + std::to_string(build_size) + "_" +
+	std::string build_file_name = "build_" + std::to_string(build_size) + "_" + std::to_string(selectivity) + "_" +
 	                              std::to_string(int(heavy_hitter_ratio)) + "_" + std::to_string(payload_column_num) +
 	                              "_" + std::to_string(payload_tuple_size);
 	std::string probe_file_name = "probe_" + std::to_string(probe_size) + "_" + std::to_string(selectivity) + "_" +
-	                              std::to_string(unique_key_ratio) + "_" + std::to_string(heavy_hitter_ratio);
-
+	                              std::to_string(unique_key_ratio) + "_" + std::to_string(heavy_hitter_ratio) + "_" +
+	                              std::to_string(payload_column_num) + "_" + std::to_string(payload_tuple_size);
+	std::cout << file_path << " " << build_file_name << " " << probe_file_name << std::endl;
 	std::string select_entry = "build_side_rowid, ";
 	for (int i = 0; i < payload_column_num - 1; i++) {
 		select_entry += "payload_" + std::to_string(i) + ", ";
@@ -47,8 +49,13 @@ int main(int argc, char *argv[]) {
 		DuckDB db(nullptr);
 		Connection con(db);
 		con.Query("SET threads TO " + thread + ";");
-		con.Query("create table build as from '" + file_path + "/build.parquet';");
-		con.Query("create table probe as from '" + file_path + "/probe.parquet';");
+		if (sorted) {
+			con.Query("create table build as from '" + file_path + "_sorted/build.parquet';");
+			con.Query("create table probe as from '" + file_path + "_sorted/probe.parquet';");
+		} else {
+			con.Query("create table build as from '" + file_path + "/build.parquet';");
+			con.Query("create table probe as from '" + file_path + "/probe.parquet';");
+		}
 		con.Query("SET disabled_optimizers = 'join_order,build_side_probe_side';");
 		std::string query = "select " + select_entry + " from probe,build where build_key = probe_key;";
 		double start = getNow();
@@ -57,9 +64,10 @@ int main(int argc, char *argv[]) {
 		if (print_result) {
 			result->Print();
 		}
-		// result->PrintRowNumber();
-		std::cout << mode << " " << probe_size << " " << build_size << " " << selectivity << " " << payload_column_num
-		          << " " << payload_tuple_size << " " << heavy_hitter_ratio << " " << end - start << std::endl;
+		result->PrintRowNumber();
+		std::cout << mode << " " << thread << " " << probe_size << " " << build_size << " " << selectivity << " "
+		          << payload_column_num << " " << payload_tuple_size << " " << heavy_hitter_ratio << " " << end - start
+		          << std::endl;
 	} else if (mode == 1) // load from uncompressed duckdb storage
 	{
 		DuckDB db("/home/yihao/duckdb/origin/duckdb/examples/embedded-c++/release/tpch_uncom.db");
@@ -74,9 +82,10 @@ int main(int argc, char *argv[]) {
 		if (print_result) {
 			result->Print();
 		}
-		// result->PrintRowNumber();
-		std::cout << mode << " " << probe_size << " " << build_size << " " << selectivity << " " << payload_column_num
-		          << " " << payload_tuple_size << " " << heavy_hitter_ratio << " " << end - start << std::endl;
+		result->PrintRowNumber();
+		std::cout << mode << " " << thread << " " << probe_size << " " << build_size << " " << selectivity << " "
+		          << payload_column_num << " " << payload_tuple_size << " " << heavy_hitter_ratio << " " << end - start
+		          << std::endl;
 	} else // load from compressed duckdb storage
 	{
 		DuckDB db("/home/yihao/duckdb/origin/duckdb/examples/embedded-c++/release/tpch.db");
@@ -91,8 +100,9 @@ int main(int argc, char *argv[]) {
 		if (print_result) {
 			result->Print();
 		}
-		// result->PrintRowNumber();
-		std::cout << mode << " " << probe_size << " " << build_size << " " << selectivity << " " << payload_column_num
-		          << " " << payload_tuple_size << " " << heavy_hitter_ratio << " " << end - start << std::endl;
+		result->PrintRowNumber();
+		std::cout << mode << " " << thread << " " << probe_size << " " << build_size << " " << selectivity << " "
+		          << payload_column_num << " " << payload_tuple_size << " " << heavy_hitter_ratio << " " << end - start
+		          << std::endl;
 	}
 }
