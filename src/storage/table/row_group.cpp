@@ -646,14 +646,14 @@ void RowGroup::Scan(TransactionData transaction, CollectionScanState &state, Dat
 }
 
 void RowGroup::GetScalar(TransactionData transaction, CollectionScanState &state, Vector &result,
-                         std::map<int64_t, std::vector<int>> &inverted_index, int64_t project_column_id,
+                         std::unordered_map<int64_t, std::vector<int>> &inverted_index, int64_t project_column_id,
                          int32_t fixed_string_len, ColumnFetchState &cfs) {
 
 	auto &column_data = GetColumn(project_column_id);
-	column_data.FetchRowNewBatch(transaction, cfs, inverted_index, result, fixed_string_len);
-	// for (auto &[rowid, row_ids] : inverted_index) {
-	// 	column_data.FetchRowNew(transaction, cfs, rowid, row_ids, result, fixed_string_len);
-	// }
+	// column_data.FetchRowNewBatch(transaction, cfs, inverted_index, result, fixed_string_len);
+	for (auto &[rowid, row_ids] : inverted_index) {
+		column_data.FetchRowNew(transaction, cfs, rowid, row_ids, result, fixed_string_len);
+	}
 }
 
 void RowGroup::GetScalar(TransactionData transaction, CollectionScanState &state, DataChunk &result, uint64_t row_id,

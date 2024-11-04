@@ -62,7 +62,7 @@ public:
 	void SetTaskForInterrupts(weak_ptr<Task> current_task);
 
 	//! row_group_id -> {row_idx -> vector of output rowids}
-	std::map<int, std::map<int64_t, std::vector<int>>> inverted_index;
+	std::unordered_map<int, std::unordered_map<int64_t, std::vector<int>>> inverted_index;
 
 	int result_index = 0;
 

@@ -158,10 +158,11 @@ CollectionScanState::CollectionScanState(TableScanState &parent_p)
     : row_group(nullptr), vector_index(0), max_row_group_row(0), row_groups(nullptr), max_row(0), batch_index(0),
       valid_sel(STANDARD_VECTOR_SIZE), parent(parent_p) {
 }
-bool CollectionScanState::Select(DuckTransaction &transaction, DataChunk &result, idx_t rowid_col_idx,
-                                 std::unordered_map<int64_t, int64_t> &project_column_ids,
-                                 std::unordered_map<int64_t, int32_t> &fixed_len_strings_columns,
-                                 std::map<int, std::map<int64_t, std::vector<int>>> &inverted_index) {
+bool CollectionScanState::Select(
+    DuckTransaction &transaction, DataChunk &result, idx_t rowid_col_idx,
+    std::unordered_map<int64_t, int64_t> &project_column_ids,
+    std::unordered_map<int64_t, int32_t> &fixed_len_strings_columns,
+    std::unordered_map<int, std::unordered_map<int64_t, std::vector<int>>> &inverted_index) {
 	auto cfs = ColumnFetchState();
 	if (inverted_index.size() > 0) {
 		for (auto &[row_group_index, row_group_inverted_index] : inverted_index) {

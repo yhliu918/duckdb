@@ -128,7 +128,7 @@ static void TableScanFunc(ClientContext &context, TableFunctionInput &data_p, Da
 			storage.Select(transaction, output, state.scan_state, data_p.rowid_column_id, data_p.materialize_col_id,
 			               data_p.fixed_len_strings_columns, data_p.inverted_index);
 		} else {
-			std::map<int, std::map<int64_t, std::vector<int>>> inverted_index;
+			std::unordered_map<int, std::unordered_map<int64_t, std::vector<int>>> inverted_index;
 			storage.Select(transaction, output, state.scan_state, data_p.rowid_column_id, data_p.materialize_col_id,
 			               data_p.fixed_len_strings_columns, inverted_index);
 		}

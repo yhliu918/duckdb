@@ -199,7 +199,7 @@ public:
 	bool Select(DuckTransaction &transaction, DataChunk &result, idx_t rowid_col_idx,
 	            std::unordered_map<int64_t, int64_t> &project_column_ids,
 	            std::unordered_map<int64_t, int32_t> &fixed_len_strings_columns,
-	            std::map<int, std::map<int64_t, std::vector<int>>> &inverted_index);
+	            std::unordered_map<int, std::unordered_map<int64_t, std::vector<int>>> &inverted_index);
 	bool SelectCol(DuckTransaction &transaction, DataChunk &result, idx_t rowid_col_idx,
 	               std::unordered_map<int64_t, int64_t> &project_column_ids);
 	bool Scan(DuckTransaction &transaction, DataChunk &result);
