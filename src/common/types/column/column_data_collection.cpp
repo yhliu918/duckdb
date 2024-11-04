@@ -10,6 +10,8 @@
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
 
+#include <assert.h>
+
 namespace duckdb {
 
 struct ColumnDataMetaData;
@@ -103,6 +105,13 @@ void ColumnDataCollection::InitializeAppend(LogicalType type) {
 	auto &segment = *segments.back();
 	if (segment.chunk_data.empty()) {
 		segment.AllocateNewChunk();
+	}
+}
+
+void ColumnDataCollection::InitializeAppend(vector<LogicalType> &type) {
+	for (auto &t : type) {
+		this->types.push_back(t);
+		copy_functions.push_back(GetCopyFunction(t));
 	}
 }
 
@@ -800,12 +809,40 @@ static bool IsComplexType(const LogicalType &type) {
 	};
 }
 
-void ColumnDataCollection::Append(ColumnDataAppendState &state, DataChunk &input) {
+void ColumnDataCollection::AppendMaterialize(ColumnDataAppendState &state, DataChunk &input, int append_column_count) {
 	D_ASSERT(!finished_append);
-	D_ASSERT(types == input.GetTypes());
+	auto &segment = *segments.back();
+	for (idx_t vector_idx = types.size() - append_column_count; vector_idx < types.size(); vector_idx++) {
+		if (IsComplexType(input.data[vector_idx - append_column_count].GetType())) {
+			input.data[vector_idx].Flatten(input.size());
+		}
+		input.data[vector_idx - append_column_count].ToUnifiedFormat(input.size(), state.vector_data[vector_idx]);
+	}
+	idx_t remaining = input.size();
+	for (auto &segment : segments) {
+		for (auto &chunk_data : segment->chunk_data) {
+			chunk_data.vector_data.resize(types.size());
+			for (idx_t vector_idx = types.size() - append_column_count; vector_idx < types.size(); vector_idx++) {
+				ColumnDataMetaData meta_data(copy_functions[vector_idx], *segment, state, chunk_data,
+				                             chunk_data.vector_data[vector_idx]);
+				copy_functions[vector_idx].function(meta_data, state.vector_data[vector_idx],
+				                                    input.data[vector_idx - append_column_count], 0, chunk_data.count);
+			}
+			remaining -= chunk_data.count;
+		}
+	}
+	assert(remaining == 0);
+}
+
+void ColumnDataCollection::Append(ColumnDataAppendState &state, DataChunk &input, int fill_column_count) {
+	if (fill_column_count == -1) {
+		fill_column_count = types.size();
+	}
+	D_ASSERT(!finished_append);
+	// D_ASSERT(types == input.GetTypes());
 
 	auto &segment = *segments.back();
-	for (idx_t vector_idx = 0; vector_idx < types.size(); vector_idx++) {
+	for (idx_t vector_idx = 0; vector_idx < fill_column_count; vector_idx++) {
 		if (IsComplexType(input.data[vector_idx].GetType())) {
 			input.data[vector_idx].Flatten(input.size());
 		}
@@ -818,7 +855,7 @@ void ColumnDataCollection::Append(ColumnDataAppendState &state, DataChunk &input
 		idx_t append_amount = MinValue<idx_t>(remaining, STANDARD_VECTOR_SIZE - chunk_data.count);
 		if (append_amount > 0) {
 			idx_t offset = input.size() - remaining;
-			for (idx_t vector_idx = 0; vector_idx < types.size(); vector_idx++) {
+			for (idx_t vector_idx = 0; vector_idx < fill_column_count; vector_idx++) {
 				ColumnDataMetaData meta_data(copy_functions[vector_idx], segment, state, chunk_data,
 				                             chunk_data.vector_data[vector_idx]);
 				copy_functions[vector_idx].function(meta_data, state.vector_data[vector_idx], input.data[vector_idx],

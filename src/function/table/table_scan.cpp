@@ -123,8 +123,15 @@ static void TableScanFunc(ClientContext &context, TableFunctionInput &data_p, Da
 	auto &storage = bind_data.table.GetStorage();
 	bool mat_flag = data_p.mat_flag;
 	if (mat_flag) {
-		storage.Select(transaction, output, state.scan_state, data_p.rowid_column_id, data_p.materialize_col_id,
-		               data_p.fixed_len_strings_columns);
+		if (data_p.use_inverted_index) {
+
+			storage.Select(transaction, output, state.scan_state, data_p.rowid_column_id, data_p.materialize_col_id,
+			               data_p.fixed_len_strings_columns, data_p.inverted_index);
+		} else {
+			std::map<int, std::map<int64_t, std::vector<int>>> inverted_index;
+			storage.Select(transaction, output, state.scan_state, data_p.rowid_column_id, data_p.materialize_col_id,
+			               data_p.fixed_len_strings_columns, inverted_index);
+		}
 		return;
 	}
 

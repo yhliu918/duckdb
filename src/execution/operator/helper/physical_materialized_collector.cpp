@@ -12,15 +12,30 @@ PhysicalMaterializedCollector::PhysicalMaterializedCollector(PreparedStatementDa
 SinkResultType PhysicalMaterializedCollector::Sink(ExecutionContext &context, DataChunk &chunk,
                                                    OperatorSinkInput &input) const {
 	auto &lstate = input.local_state.Cast<MaterializedCollectorLocalState>();
-	auto &types = lstate.collection->Types();
-	if (input.materialize_flag && !lstate.set_output) {
-		for (auto [col, type] : input.materialize_column_types) {
-			lstate.collection->InitializeAppend(LogicalType(LogicalTypeId(type)));
-		}
-		lstate.append_state.vector_data.resize(lstate.collection->Types().size());
+	if (input.materialize_strategy_mode == 1 && input.final_materilaize) {
+		// vector<LogicalType> types;
+		// for (auto [col, type] : input.materialize_column_types) {
+		// 	types.push_back(LogicalType(LogicalTypeId(type)));
+		// }
+		// lstate.collection->InitializeAppend(types);
+		// lstate.append_state.vector_data.resize(lstate.collection->Types().size());
 		lstate.set_output = true;
+
+		lstate.collection->AppendMaterialize(lstate.append_state, chunk, input.materialize_column_types.size());
+	} else {
+		int origin_column_count = chunk.data.size();
+		if (input.materialize_flag && !lstate.set_output && input.materialize_column_types.size() > 0) {
+			for (auto [col, type] : input.materialize_column_types) {
+				lstate.collection->InitializeAppend(LogicalType(LogicalTypeId(type)));
+			}
+			lstate.append_state.vector_data.resize(lstate.collection->Types().size());
+			lstate.set_output = true;
+		}
+		int fill_columns =
+		    input.materialize_strategy_mode == 0 ? lstate.collection->Types().size() : origin_column_count;
+
+		lstate.collection->Append(lstate.append_state, chunk, fill_columns);
 	}
-	lstate.collection->Append(lstate.append_state, chunk);
 	return SinkResultType::NEED_MORE_INPUT;
 }
 

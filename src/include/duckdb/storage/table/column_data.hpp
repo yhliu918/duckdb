@@ -133,6 +133,9 @@ public:
 	//! Fetch a specific row id and append it to the vector
 	virtual void FetchRow(TransactionData transaction, ColumnFetchState &state, row_t row_id, Vector &result,
 	                      idx_t result_idx);
+	ColumnSegment *Prefetch(int prefetch_idx);
+	void FetchRowNew(TransactionData &transaction, ColumnFetchState &cfs, int64_t rowid, std::vector<int> &row_ids,
+	                 Vector &result, int32_t fixed_string_len);
 	void FetchRowNew(TransactionData transaction, ColumnFetchState &state, row_t row_id, Vector &result,
 	                 idx_t result_idx, int32_t string_size = 0);
 

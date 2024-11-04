@@ -2,6 +2,7 @@
 
 #include "duckdb/catalog/catalog_entry/duck_table_entry.hpp"
 #include "duckdb/common/limits.hpp"
+#include "duckdb/execution/operator/helper/physical_materialized_collector.hpp"
 #include "duckdb/execution/operator/join/physical_hash_join.hpp"
 #include "duckdb/execution/operator/scan/physical_table_scan.hpp"
 #include "duckdb/function/table/table_scan.hpp"
@@ -11,6 +12,7 @@
 #include <iostream>
 #include <sys/time.h>
 #include <thread>
+#include <unistd.h>
 
 #ifdef DUCKDB_DEBUG_ASYNC_SINK_SOURCE
 #include <chrono>
@@ -77,12 +79,13 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 						map<int64_t, int8_t> col_types;
 						unordered_map<int64_t, int32_t> fixed_len_strings_columns;
 						int rowid_col_idx;
+						int materialize_strategy_mode;
 						if (file.is_open()) {
 							idx_t table_col_idx;
 							idx_t result_col_idx;
 							int logical_type;
 							int string_length = 0;
-
+							file >> materialize_strategy_mode;
 							file >> rowid_col_idx;
 
 							while (file >> table_col_idx >> result_col_idx >> logical_type) {
@@ -97,7 +100,8 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 						}
 
 						if (!col_map.empty() && !pipeline.materialize_flag) {
-							pipeline.SetMaterializeMap(rowid_col_idx, col_map, col_types, fixed_len_strings_columns);
+							pipeline.SetMaterializeMap(materialize_strategy_mode, rowid_col_idx, col_map, col_types,
+							                           fixed_len_strings_columns);
 						}
 					}
 				}
@@ -122,7 +126,7 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 		}
 	}
 
-	if (pipeline.materialize_flag) {
+	if (pipeline.materialize_flag && pipeline.materialize_strategy_mode == 0) {
 		auto &last_op = pipeline.operators.empty() ? *pipeline.source : pipeline.operators.back().get();
 		auto types = last_op.GetTypes();
 		auto chunk = make_uniq<DataChunk>();
@@ -392,12 +396,33 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 			StartOperator(*pipeline.sink);
 			D_ASSERT(pipeline.sink);
 			D_ASSERT(pipeline.sink->sink_state);
-			OperatorSinkInput sink_input {*pipeline.sink->sink_state, *local_sink_state, interrupt_state,
-			                              pipeline.materialize_flag, pipeline.materialize_column_types};
+			OperatorSinkInput sink_input {*pipeline.sink->sink_state,
+			                              *local_sink_state,
+			                              interrupt_state,
+			                              pipeline.materialize_flag,
+			                              pipeline.materialize_column_types,
+			                              pipeline.materialize_strategy_mode};
+			// if (pipeline.materialize_strategy_mode == 0) {
+			// 	sink_input.materialize_strategy_mode = 0;
+			// 	sink_input.materialize_column_types = pipeline.materialize_column_types;
+			// }
 			double sink_start = getNow();
 			auto sink_result = Sink(sink_chunk, sink_input);
 			double sink_end = getNow();
 			pipeline.incrementOperatorTime(sink_end - sink_start, pipeline.operators.size());
+
+			double materialize_start = getNow();
+			if (pipeline.materialize_strategy_mode == 1) {
+				auto sel_vec = sink_chunk.data[pipeline.rowid_col_idx];
+				int64_t *sel = reinterpret_cast<int64_t *>(sel_vec.GetData());
+				for (int64_t i = 0; i < sink_chunk.size(); i++) {
+					auto rowid = sel[i];
+					inverted_index[rowid / STANDARD_ROW_GROUPS_SIZE][rowid].push_back(++result_index);
+					inverted_index_full[rowid].push_back(++result_index);
+				}
+			}
+			double materialize_end = getNow();
+			pipeline.mat_operator_time += materialize_end - materialize_start;
 
 			EndOperator(*pipeline.sink, nullptr);
 
@@ -420,6 +445,50 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 	}
 
 	D_ASSERT(local_sink_state);
+
+	double materialize_start = getNow();
+	if (pipeline.materialize_strategy_mode == 1) {
+		// materialize the inverted index columns and sink->Sink
+		auto &last_op = pipeline.operators.empty() ? *pipeline.source : pipeline.operators.back().get();
+		int origin_output_count = last_op.GetTypes().size();
+		vector<LogicalType> types;
+		for (auto &[col_id, type] : pipeline.materialize_column_types) {
+			types.push_back(LogicalType(LogicalTypeId(type)));
+		}
+		DataChunk mat_chunk;
+		mat_chunk.Initialize(Allocator::DefaultAllocator(), types, result_index);
+		unordered_map<int64_t, int64_t> materialize_column_ids_new;
+		for (auto &[col_idx, result_col_index] : pipeline.materialize_column_ids) {
+			materialize_column_ids_new[col_idx] = result_col_index - origin_output_count;
+		}
+		unordered_map<int64_t, int32_t> fixed_len_strings_columns_new;
+		for (auto &[col_index, length] : pipeline.fixed_len_strings_columns) {
+			fixed_len_strings_columns_new[col_index - origin_output_count] = length;
+		}
+		OperatorSourceInput source_input = {*pipeline.materialize_source_state,
+		                                    *pipeline.materialize_local_source_state,
+		                                    interrupt_state,
+		                                    true,
+		                                    pipeline.rowid_col_idx,
+		                                    materialize_column_ids_new,
+		                                    fixed_len_strings_columns_new,
+		                                    true,
+		                                    std::move(inverted_index)};
+		mat_chunk.SetCardinality(result_index);
+		// std::cout << "cardinality " << result_index << std::endl;
+		auto res = pipeline.materialize_source->GetData(context, mat_chunk, source_input);
+		// std::cout << "get data" << std::endl;
+		OperatorSinkInput sink_input {*pipeline.sink->sink_state,
+		                              *local_sink_state,
+		                              interrupt_state,
+		                              pipeline.materialize_flag,
+		                              pipeline.materialize_column_types,
+		                              pipeline.materialize_strategy_mode,
+		                              true};
+		pipeline.sink->Sink(context, mat_chunk, sink_input);
+	}
+	double materialize_end = getNow();
+	pipeline.mat_operator_time += materialize_end - materialize_start;
 
 	// Run the combine for the sink
 	OperatorSinkCombineInput combine_input {*pipeline.sink->sink_state, *local_sink_state, interrupt_state};
@@ -483,7 +552,6 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 		std::cout << "Total time: " << pipeline.total_time << std::endl;
 	}
 	pipeline.mat_lock.unlock();
-
 	pipeline.executor.Flush(thread);
 	local_sink_state.reset();
 	return PipelineExecuteResult::FINISHED;
@@ -545,7 +613,8 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 			                                          *intermediate_states[current_intermediate - 1]);
 			double op_end = getNow();
 			pipeline.incrementOperatorTime(op_end - op_start, operator_idx);
-			if (pipeline.materialize_flag && operator_idx == pipeline.operators.size() - 1) {
+			if (pipeline.materialize_flag && operator_idx == pipeline.operators.size() - 1 &&
+			    pipeline.materialize_strategy_mode == 0) {
 				double mat_start = getNow();
 				OperatorSourceInput source_input = {*pipeline.materialize_source_state,
 				                                    *pipeline.materialize_local_source_state,
@@ -553,7 +622,8 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 				                                    true,
 				                                    pipeline.rowid_col_idx,
 				                                    pipeline.materialize_column_ids,
-				                                    pipeline.fixed_len_strings_columns};
+				                                    pipeline.fixed_len_strings_columns,
+				                                    false};
 				// std::cout << std::this_thread::get_id() << " " << pipeline.materialize_column_ids.size() << " "
 				//           << pipeline.materialize_column_types.size() << " "
 				//           << (pipeline.materialize_source_state != nullptr) << " "
@@ -672,7 +742,8 @@ void PipelineExecutor::InitializeChunk(DataChunk &chunk) {
 	auto &last_op = pipeline.operators.empty() ? *pipeline.source : pipeline.operators.back().get();
 	auto types = last_op.GetTypes();
 	if (pipeline.sink) {
-		if (pipeline.sink->type == PhysicalOperatorType::RESULT_COLLECTOR && pipeline.operators.size() > 0) {
+		if (pipeline.sink->type == PhysicalOperatorType::RESULT_COLLECTOR && pipeline.operators.size() > 0 &&
+		    pipeline.materialize_strategy_mode == 0) {
 			pipeline.mat_lock.lock();
 			for (auto &[col_id, type] : pipeline.materialize_column_types) {
 				types.push_back(LogicalType(LogicalTypeId(type)));

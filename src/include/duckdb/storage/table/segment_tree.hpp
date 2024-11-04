@@ -166,6 +166,7 @@ public:
 		} else {
 			node_idx = node_idx / ((DEFAULT_BLOCK_ALLOC_SIZE - 8) / nodes[0].node->type_size);
 		}
+		// std::cout << row_id << " " << node_idx << " " << start_index[node_idx] << std::endl;
 		return nodes[node_idx].node.get();
 	}
 

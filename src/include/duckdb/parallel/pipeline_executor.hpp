@@ -61,6 +61,12 @@ public:
 	//! Registers the task in the interrupt_state to allow Source/Sink operators to block the task
 	void SetTaskForInterrupts(weak_ptr<Task> current_task);
 
+	//! row_group_id -> {row_idx -> vector of output rowids}
+	std::map<int, std::map<int64_t, std::vector<int>>> inverted_index;
+	std::map<int64_t, std::vector<int>> inverted_index_full;
+
+	int result_index = 0;
+
 private:
 	//! The pipeline to process
 	Pipeline &pipeline;

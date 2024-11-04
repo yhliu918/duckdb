@@ -145,6 +145,7 @@ void ColumnSegment::ScanPartial(ColumnScanState &state, idx_t scan_count, Vector
 void ColumnSegment::FetchRow(ColumnFetchState &state, row_t row_id, Vector &result, idx_t result_idx) {
 	// fix me
 	// UnsafeNumericCast<int64_t>(UnsafeNumericCast<idx_t>(row_id) - this->start)
+	// std::cout << "row_id: " << row_id << " start: " << this->start << std::endl;
 	function.get().fetch_row(*this, state, row_id - this->start, result, result_idx);
 }
 

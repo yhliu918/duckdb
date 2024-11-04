@@ -111,6 +111,9 @@ struct ColumnFetchState {
 	vector<unique_ptr<ColumnFetchState>> child_states;
 
 	BufferHandle &GetOrInsertHandle(ColumnSegment &segment);
+
+	uint32_t fixed_length = 0;
+	std::vector<int> *row_index;
 };
 
 struct ScanFilter {
@@ -195,7 +198,8 @@ public:
 	TableScanOptions &GetOptions();
 	bool Select(DuckTransaction &transaction, DataChunk &result, idx_t rowid_col_idx,
 	            std::unordered_map<int64_t, int64_t> &project_column_ids,
-	            std::unordered_map<int64_t, int32_t> &fixed_len_strings_columns);
+	            std::unordered_map<int64_t, int32_t> &fixed_len_strings_columns,
+	            std::map<int, std::map<int64_t, std::vector<int>>> &inverted_index);
 	bool SelectCol(DuckTransaction &transaction, DataChunk &result, idx_t rowid_col_idx,
 	               std::unordered_map<int64_t, int64_t> &project_column_ids);
 	bool Scan(DuckTransaction &transaction, DataChunk &result);

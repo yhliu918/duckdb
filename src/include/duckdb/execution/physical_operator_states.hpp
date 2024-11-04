@@ -164,6 +164,8 @@ struct OperatorSinkInput {
 	InterruptState &interrupt_state;
 	bool materialize_flag;
 	map<int64_t, int8_t> materialize_column_types;
+	int materialize_strategy_mode;
+	bool final_materilaize;
 };
 
 struct OperatorSourceInput {
@@ -174,6 +176,8 @@ struct OperatorSourceInput {
 	int64_t rowid_column_id;
 	unordered_map<int64_t, int64_t> materialize_col_id;
 	unordered_map<int64_t, int32_t> fixed_len_strings_columns;
+	bool use_inverted_index;
+	std::map<int, std::map<int64_t, std::vector<int>>> inverted_index;
 };
 
 struct OperatorSinkCombineInput {

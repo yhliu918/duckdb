@@ -132,13 +132,15 @@ public:
 	                   optional_ptr<GlobalTableFunctionState> global_state_p, bool mat_flag_p = false,
 	                   int64_t rowid_column_id_p = 0,
 	                   unordered_map<int64_t, int64_t> materialize_col_id_p = unordered_map<int64_t, int64_t>(),
-	                   unordered_map<int64_t, int32_t> fixed_len_strings_columns_p = unordered_map<int64_t, int32_t>())
+	                   unordered_map<int64_t, int32_t> fixed_len_strings_columns_p = unordered_map<int64_t, int32_t>(),
+	                   bool use_inverted_index = false)
 	    : bind_data(bind_data_p), local_state(local_state_p), global_state(global_state_p) {
 		mat_flag = mat_flag_p;
 		if (mat_flag_p) {
 			materialize_col_id = materialize_col_id_p;
 			rowid_column_id = rowid_column_id_p;
 			fixed_len_strings_columns = fixed_len_strings_columns_p;
+			this->use_inverted_index = use_inverted_index;
 		}
 	}
 
@@ -150,6 +152,8 @@ public:
 	int64_t rowid_column_id;
 	unordered_map<int64_t, int64_t> materialize_col_id;
 	unordered_map<int64_t, int32_t> fixed_len_strings_columns;
+	bool use_inverted_index;
+	std::map<int, std::map<int64_t, std::vector<int>>> inverted_index;
 };
 
 enum class ScanType : uint8_t { TABLE, PARQUET };

@@ -489,6 +489,26 @@ void ColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, 
 
 	// FetchUpdateRow(transaction, row_id, result, result_idx);
 }
+ColumnSegment *ColumnData::Prefetch(int prefetch_idx) {
+	// __builtin_prefetch(data.GetSegmentNode_fixed((prefetch_idx % STANDARD_ROW_GROUPS_SIZE), prefetch_idx, 0), 0, 3);
+	return data.GetSegmentNode_fixed((prefetch_idx % STANDARD_ROW_GROUPS_SIZE), prefetch_idx, 0);
+}
+
+void ColumnData::FetchRowNew(TransactionData &transaction, ColumnFetchState &state, int64_t rowid,
+                             std::vector<int> &row_ids, Vector &result, int32_t fixed_string_len) {
+	ColumnSegment *segment = nullptr;
+	if (fixed_string_len != 0 ||
+	    (data.nodes[0].node->function.get().type == CompressionType::COMPRESSION_UNCOMPRESSED &&
+	     data.nodes[0].node->type.InternalType() != PhysicalType::VARCHAR)) {
+		segment = data.GetSegmentNode_fixed((rowid % STANDARD_ROW_GROUPS_SIZE), rowid, fixed_string_len);
+	} else {
+		segment = data.GetSegmentNode(rowid, rowid);
+	}
+	state.fixed_length = fixed_string_len;
+	state.row_index = &row_ids;
+
+	segment->FetchRow(state, rowid, result, MAX_ROW_ID);
+}
 
 void ColumnData::FetchRowNew(TransactionData transaction, ColumnFetchState &state, row_t row_id, Vector &result,
                              idx_t result_idx, int32_t string_size) {
@@ -499,6 +519,7 @@ void ColumnData::FetchRowNew(TransactionData transaction, ColumnFetchState &stat
 	                         data.nodes[0].node->type.InternalType() != PhysicalType::VARCHAR)) {
 		// segment = data.GetSegmentNode_fixed(((row_id % 1048576) % STANDARD_ROW_GROUPS_SIZE), row_id, string_size);
 		segment = data.GetSegmentNode_fixed((row_id % STANDARD_ROW_GROUPS_SIZE), row_id, string_size);
+		state.fixed_length = string_size;
 	} else {
 		segment = data.GetSegmentNode(row_id, row_id);
 	}

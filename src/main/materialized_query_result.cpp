@@ -25,18 +25,18 @@ string MaterializedQueryResult::ToString() {
 	if (success) {
 		result = HeaderToString();
 		result += "[ Rows: " + to_string(collection->Count()) + "]\n";
-		// auto &coll = Collection();
-		// for (auto &row : coll.Rows()) {
-		// 	for (idx_t col_idx = 0; col_idx < coll.ColumnCount(); col_idx++) {
-		// 		if (col_idx > 0) {
-		// 			result += "\t";
-		// 		}
-		// 		auto val = row.GetValue(col_idx);
-		// 		result += val.IsNull() ? "NULL" : StringUtil::Replace(val.ToString(), string("\0", 1), "\\0");
-		// 	}
-		// 	result += "\n";
-		// }
-		// result += "\n";
+		auto &coll = Collection();
+		for (auto &row : coll.Rows()) {
+			for (idx_t col_idx = 0; col_idx < coll.ColumnCount(); col_idx++) {
+				if (col_idx > 0) {
+					result += "\t";
+				}
+				auto val = row.GetValue(col_idx);
+				result += val.IsNull() ? "NULL" : StringUtil::Replace(val.ToString(), string("\0", 1), "\\0");
+			}
+			result += "\n";
+		}
+		result += "\n";
 		result += "[ Rows: " + to_string(collection->Count()) + "]\n";
 	} else {
 		result = GetError() + "\n";

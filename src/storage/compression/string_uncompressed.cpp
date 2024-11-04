@@ -143,6 +143,17 @@ void UncompressedStringStorage::StringFetchRow(ColumnSegment &segment, ColumnFet
 	auto dict = GetDictionary(segment, handle);
 	auto base_data = reinterpret_cast<int32_t *>(baseptr + DICTIONARY_HEADER_SIZE);
 	auto result_data = FlatVector::GetData<string_t>(result);
+	if (state.fixed_length) {
+		auto data = char_ptr_cast(baseptr + dict.end - state.fixed_length * (row_id + 1));
+		if (state.row_index) {
+			for (auto index : *state.row_index) {
+				result_data[result_idx] = string_t(data, state.fixed_length);
+			}
+			return;
+		} else {
+			result_data[result_idx] = string_t(data, state.fixed_length);
+		}
+	}
 
 	auto dict_offset = base_data[row_id];
 	uint32_t string_length;
@@ -152,7 +163,14 @@ void UncompressedStringStorage::StringFetchRow(ColumnSegment &segment, ColumnFet
 	} else {
 		string_length = NumericCast<uint32_t>(std::abs(dict_offset) - std::abs(base_data[row_id - 1]));
 	}
-	result_data[result_idx] = FetchStringFromDict(segment, dict, result, baseptr, dict_offset, string_length);
+	auto result_string = FetchStringFromDict(segment, dict, result, baseptr, dict_offset, string_length);
+	if (state.row_index) {
+		for (auto index : *state.row_index) {
+			result_data[result_idx] = result_string;
+		}
+		return;
+	}
+	result_data[result_idx] = result_string;
 }
 
 //===--------------------------------------------------------------------===//
