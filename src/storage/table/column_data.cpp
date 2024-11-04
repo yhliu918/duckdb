@@ -494,6 +494,28 @@ ColumnSegment *ColumnData::Prefetch(int prefetch_idx) {
 	return data.GetSegmentNode_fixed((prefetch_idx % STANDARD_ROW_GROUPS_SIZE), prefetch_idx, 0);
 }
 
+void ColumnData::FetchRowNewBatch(TransactionData &transaction, ColumnFetchState &state,
+                                  std::map<int64_t, std::vector<int>> &inverted_index, Vector &result,
+                                  int32_t fixed_string_len) {
+	int node_idx = 0;
+	ColumnSegment *segment = data.nodes[node_idx].node.get();
+	int start_index = data.nodes[node_idx].row_start;
+	int end_index = start_index + data.nodes[node_idx].node->count;
+	state.fixed_length = fixed_string_len;
+	auto it = inverted_index.begin();
+	while (it != inverted_index.end()) {
+		if (it->first >= end_index) {
+			node_idx++;
+			segment = data.nodes[node_idx].node.get();
+			start_index = data.nodes[node_idx].row_start;
+			end_index = start_index + data.nodes[node_idx].node->count;
+		}
+		state.row_index = &it->second;
+		segment->FetchRow(state, it->first, result, MAX_ROW_ID);
+		it++;
+	}
+}
+
 void ColumnData::FetchRowNew(TransactionData &transaction, ColumnFetchState &state, int64_t rowid,
                              std::vector<int> &row_ids, Vector &result, int32_t fixed_string_len) {
 	ColumnSegment *segment = nullptr;

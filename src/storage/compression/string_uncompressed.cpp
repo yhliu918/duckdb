@@ -147,7 +147,7 @@ void UncompressedStringStorage::StringFetchRow(ColumnSegment &segment, ColumnFet
 		auto data = char_ptr_cast(baseptr + dict.end - state.fixed_length * (row_id + 1));
 		if (state.row_index) {
 			for (auto index : *state.row_index) {
-				result_data[result_idx] = string_t(data, state.fixed_length);
+				result_data[index] = string_t(data, state.fixed_length);
 			}
 			return;
 		} else {
@@ -166,7 +166,7 @@ void UncompressedStringStorage::StringFetchRow(ColumnSegment &segment, ColumnFet
 	auto result_string = FetchStringFromDict(segment, dict, result, baseptr, dict_offset, string_length);
 	if (state.row_index) {
 		for (auto index : *state.row_index) {
-			result_data[result_idx] = result_string;
+			result_data[index] = result_string;
 		}
 		return;
 	}

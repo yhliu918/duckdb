@@ -650,9 +650,10 @@ void RowGroup::GetScalar(TransactionData transaction, CollectionScanState &state
                          int32_t fixed_string_len, ColumnFetchState &cfs) {
 
 	auto &column_data = GetColumn(project_column_id);
-	for (auto &[rowid, row_ids] : inverted_index) {
-		column_data.FetchRowNew(transaction, cfs, rowid, row_ids, result, fixed_string_len);
-	}
+	column_data.FetchRowNewBatch(transaction, cfs, inverted_index, result, fixed_string_len);
+	// for (auto &[rowid, row_ids] : inverted_index) {
+	// 	column_data.FetchRowNew(transaction, cfs, rowid, row_ids, result, fixed_string_len);
+	// }
 }
 
 void RowGroup::GetScalar(TransactionData transaction, CollectionScanState &state, DataChunk &result, uint64_t row_id,

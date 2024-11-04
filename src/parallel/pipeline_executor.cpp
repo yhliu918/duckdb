@@ -418,7 +418,6 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 				for (int64_t i = 0; i < sink_chunk.size(); i++) {
 					auto rowid = sel[i];
 					inverted_index[rowid / STANDARD_ROW_GROUPS_SIZE][rowid].push_back(++result_index);
-					inverted_index_full[rowid].push_back(++result_index);
 				}
 			}
 			double materialize_end = getNow();

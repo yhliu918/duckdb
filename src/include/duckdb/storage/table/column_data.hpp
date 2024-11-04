@@ -134,6 +134,9 @@ public:
 	virtual void FetchRow(TransactionData transaction, ColumnFetchState &state, row_t row_id, Vector &result,
 	                      idx_t result_idx);
 	ColumnSegment *Prefetch(int prefetch_idx);
+	void FetchRowNewBatch(TransactionData &transaction, ColumnFetchState &state,
+	                      std::map<int64_t, std::vector<int>> &inverted_index, Vector &result,
+	                      int32_t fixed_string_len);
 	void FetchRowNew(TransactionData &transaction, ColumnFetchState &cfs, int64_t rowid, std::vector<int> &row_ids,
 	                 Vector &result, int32_t fixed_string_len);
 	void FetchRowNew(TransactionData transaction, ColumnFetchState &state, row_t row_id, Vector &result,
