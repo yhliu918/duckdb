@@ -282,9 +282,10 @@ bool DataTable::NextParallelScan(ClientContext &context, ParallelTableScanState 
 void DataTable::Select(DuckTransaction &transaction, DataChunk &result, TableScanState &state, idx_t rowid_col_idx,
                        std::unordered_map<int64_t, int64_t> &project_column_ids,
                        std::unordered_map<int64_t, int32_t> &fixed_len_strings_columns,
-                       std::unordered_map<int, std::unordered_map<int64_t, std::vector<int>>> &inverted_index) {
+                       std::unordered_map<int, std::unordered_map<int64_t, std::vector<int>>> *inverted_index,
+                       std::unordered_map<int, std::vector<std::pair<int64_t, int>>> *inverted_indexnew) {
 	state.table_state.Select(transaction, result, rowid_col_idx, project_column_ids, fixed_len_strings_columns,
-	                         inverted_index);
+	                         inverted_index, inverted_indexnew);
 }
 void DataTable::Scan(DuckTransaction &transaction, DataChunk &result, TableScanState &state) {
 	// scan the persistent segments

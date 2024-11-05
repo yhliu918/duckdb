@@ -98,7 +98,8 @@ SourceResultType PhysicalTableScan::GetData(ExecutionContext &context, DataChunk
 	                        input.rowid_column_id, input.materialize_col_id, input.fixed_len_strings_columns,
 	                        input.use_inverted_index);
 	if (input.use_inverted_index) {
-		data.inverted_index = std::move(input.inverted_index);
+		data.inverted_index = input.inverted_index;
+		data.inverted_indexnew = input.inverted_indexnew;
 	}
 	if (function.function) {
 		function.function(context.client, data, chunk);

@@ -148,6 +148,7 @@ public:
 
 	vector<double> operator_total_time;
 	double mat_operator_time = 0;
+	double map_building_time = 0;
 	double total_time = 0;
 
 private:

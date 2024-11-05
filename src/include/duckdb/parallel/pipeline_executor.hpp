@@ -63,6 +63,8 @@ public:
 
 	//! row_group_id -> {row_idx -> vector of output rowids}
 	std::unordered_map<int, std::unordered_map<int64_t, std::vector<int>>> inverted_index;
+	// std::unordered_map<int, std::map<int64_t, std::vector<int>>> inverted_indexnew;
+	std::unordered_map<int, std::vector<std::pair<int64_t, int>>> inverted_indexnew;
 
 	int result_index = 0;
 

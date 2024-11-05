@@ -134,6 +134,13 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 		intermediate_chunks.push_back(std::move(chunk));
 	}
 
+	// if (pipeline.materialize_strategy_mode == 1) {
+	// 	inverted_index.reserve(100);
+	// 	// for (int i = 0; i < 100; i++) {
+	// 	// 	inverted_index[i].reserve(STANDARD_ROW_GROUPS_SIZE / 10);
+	// 	// }
+	// }
+
 	InitializeChunk(final_chunk);
 }
 
@@ -411,17 +418,31 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 			double sink_end = getNow();
 			pipeline.incrementOperatorTime(sink_end - sink_start, pipeline.operators.size());
 
+			// if (pipeline.materialize_strategy_mode == 1) {
+			// 	auto sel_vec = sink_chunk.data[pipeline.rowid_col_idx];
+			// 	int64_t *sel = reinterpret_cast<int64_t *>(sel_vec.GetData());
+			// 	for (int64_t i = 0; i < sink_chunk.size(); i++) {
+			// 		auto rowid = sel[i];
+			// 		inverted_index[rowid / STANDARD_ROW_GROUPS_SIZE][rowid].emplace_back(result_index++);
+			// 	}
+			// }
 			double materialize_start = getNow();
+
 			if (pipeline.materialize_strategy_mode == 1) {
 				auto sel_vec = sink_chunk.data[pipeline.rowid_col_idx];
 				int64_t *sel = reinterpret_cast<int64_t *>(sel_vec.GetData());
 				for (int64_t i = 0; i < sink_chunk.size(); i++) {
 					auto rowid = sel[i];
-					inverted_index[rowid / STANDARD_ROW_GROUPS_SIZE][rowid].push_back(++result_index);
+					// inverted_indexnew[rowid / STANDARD_ROW_GROUPS_SIZE][rowid].emplace_back(result_index++);
+					// inverted_index[rowid / STANDARD_ROW_GROUPS_SIZE][rowid].emplace_back(result_index++);
+
+					inverted_indexnew[rowid / STANDARD_ROW_GROUPS_SIZE].emplace_back(
+					    std::make_pair(rowid, result_index++));
 				}
 			}
+
 			double materialize_end = getNow();
-			pipeline.mat_operator_time += materialize_end - materialize_start;
+			pipeline.map_building_time += materialize_end - materialize_start;
 
 			EndOperator(*pipeline.sink, nullptr);
 
@@ -472,10 +493,12 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 		                                    materialize_column_ids_new,
 		                                    fixed_len_strings_columns_new,
 		                                    true,
-		                                    std::move(inverted_index)};
+		                                    nullptr,
+		                                    &inverted_indexnew};
 		mat_chunk.SetCardinality(result_index);
 		// std::cout << "cardinality " << result_index << std::endl;
 		auto res = pipeline.materialize_source->GetData(context, mat_chunk, source_input);
+
 		// std::cout << "get data" << std::endl;
 		OperatorSinkInput sink_input {*pipeline.sink->sink_state,
 		                              *local_sink_state,
@@ -484,6 +507,7 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 		                              pipeline.materialize_column_types,
 		                              pipeline.materialize_strategy_mode,
 		                              true};
+
 		pipeline.sink->Sink(context, mat_chunk, sink_input);
 	}
 	double materialize_end = getNow();
@@ -532,7 +556,7 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 	}
 
 	bool print = pipeline.operators.size() > 0 || pipeline.sink->type != PhysicalOperatorType::CREATE_TABLE_AS;
-	// print = false;
+	print = false;
 	if (print) {
 		std::cout << "----------------------------" << std::endl;
 		for (int i = 0; i < pipeline.operator_total_time.size() - 1; i++) {
@@ -545,6 +569,9 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 			          << std::endl;
 		}
 		if (pipeline.materialize_flag) {
+			if (pipeline.materialize_strategy_mode == 1) {
+				std::cout << "Map building time: " << pipeline.map_building_time << std::endl;
+			}
 			std::cout << "Materialize operator time: " << pipeline.mat_operator_time << std::endl;
 		}
 		std::cout << "----------------------------" << std::endl;

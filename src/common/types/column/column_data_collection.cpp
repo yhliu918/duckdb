@@ -812,23 +812,29 @@ static bool IsComplexType(const LogicalType &type) {
 void ColumnDataCollection::AppendMaterialize(ColumnDataAppendState &state, DataChunk &input, int append_column_count) {
 	D_ASSERT(!finished_append);
 	auto &segment = *segments.back();
+	int idx = 0;
 	for (idx_t vector_idx = types.size() - append_column_count; vector_idx < types.size(); vector_idx++) {
-		if (IsComplexType(input.data[vector_idx - append_column_count].GetType())) {
-			input.data[vector_idx].Flatten(input.size());
+		if (IsComplexType(input.data[idx].GetType())) {
+			input.data[idx].Flatten(input.size());
 		}
-		input.data[vector_idx - append_column_count].ToUnifiedFormat(input.size(), state.vector_data[vector_idx]);
+		input.data[idx].ToUnifiedFormat(input.size(), state.vector_data[vector_idx]);
+		idx++;
 	}
 	idx_t remaining = input.size();
+	int offset = 0;
 	for (auto &segment : segments) {
 		for (auto &chunk_data : segment->chunk_data) {
-			chunk_data.vector_data.resize(types.size());
+			// chunk_data.vector_data.resize(types.size());
+			int idx = 0;
 			for (idx_t vector_idx = types.size() - append_column_count; vector_idx < types.size(); vector_idx++) {
 				ColumnDataMetaData meta_data(copy_functions[vector_idx], *segment, state, chunk_data,
 				                             chunk_data.vector_data[vector_idx]);
-				copy_functions[vector_idx].function(meta_data, state.vector_data[vector_idx],
-				                                    input.data[vector_idx - append_column_count], 0, chunk_data.count);
+				copy_functions[vector_idx].function(meta_data, state.vector_data[vector_idx], input.data[idx], offset,
+				                                    chunk_data.count);
+				idx++;
 			}
 			remaining -= chunk_data.count;
+			offset += chunk_data.count;
 		}
 	}
 	assert(remaining == 0);

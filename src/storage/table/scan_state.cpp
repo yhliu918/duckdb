@@ -158,14 +158,29 @@ CollectionScanState::CollectionScanState(TableScanState &parent_p)
     : row_group(nullptr), vector_index(0), max_row_group_row(0), row_groups(nullptr), max_row(0), batch_index(0),
       valid_sel(STANDARD_VECTOR_SIZE), parent(parent_p) {
 }
-bool CollectionScanState::Select(
-    DuckTransaction &transaction, DataChunk &result, idx_t rowid_col_idx,
-    std::unordered_map<int64_t, int64_t> &project_column_ids,
-    std::unordered_map<int64_t, int32_t> &fixed_len_strings_columns,
-    std::unordered_map<int, std::unordered_map<int64_t, std::vector<int>>> &inverted_index) {
+bool CollectionScanState::Select(DuckTransaction &transaction, DataChunk &result, idx_t rowid_col_idx,
+                                 std::unordered_map<int64_t, int64_t> &project_column_ids,
+                                 std::unordered_map<int64_t, int32_t> &fixed_len_strings_columns,
+                                 std::unordered_map<int, std::unordered_map<int64_t, std::vector<int>>> *inverted_index,
+                                 std::unordered_map<int, std::vector<std::pair<int64_t, int>>> *inverted_indexnew) {
 	auto cfs = ColumnFetchState();
-	if (inverted_index.size() > 0) {
-		for (auto &[row_group_index, row_group_inverted_index] : inverted_index) {
+	if (inverted_index && inverted_index->size() > 0) {
+		for (auto &[row_group_index, row_group_inverted_index] : *inverted_index) {
+			auto row_group = row_groups->GetSegmentNode(row_group_index);
+			for (auto [col_idx, result_col_idx] : project_column_ids) {
+				auto &result_vec = result.data[result_col_idx];
+				if (fixed_len_strings_columns.find(result_col_idx) != fixed_len_strings_columns.end()) {
+					row_group->GetScalar(transaction, *this, result_vec, row_group_inverted_index, col_idx,
+					                     fixed_len_strings_columns[result_col_idx], cfs);
+				} else {
+					row_group->GetScalar(transaction, *this, result_vec, row_group_inverted_index, col_idx, 0, cfs);
+				}
+			}
+		}
+		return true;
+	}
+	if (inverted_indexnew && inverted_indexnew->size() > 0) {
+		for (auto &[row_group_index, row_group_inverted_index] : *inverted_indexnew) {
 			auto row_group = row_groups->GetSegmentNode(row_group_index);
 			for (auto [col_idx, result_col_idx] : project_column_ids) {
 				auto &result_vec = result.data[result_col_idx];
