@@ -96,7 +96,7 @@ public:
 	            std::unordered_map<int64_t, int64_t> &project_column_ids,
 	            std::unordered_map<int64_t, int32_t> &fixed_len_strings_columns,
 	            std::unordered_map<int, std::unordered_map<int64_t, std::vector<int>>> *inverted_index,
-	            std::unordered_map<int, std::vector<std::pair<int64_t, int>>> *inverted_indexnew);
+	            std::vector<std::vector<std::pair<int64_t, int>>> *inverted_indexnew);
 	//! Fetch data from the specific row identifiers from the base table
 	void Fetch(DuckTransaction &transaction, DataChunk &result, const vector<column_t> &column_ids,
 	           const Vector &row_ids, idx_t fetch_count, ColumnFetchState &state);

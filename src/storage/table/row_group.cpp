@@ -653,6 +653,33 @@ void RowGroup::GetScalar(TransactionData transaction, CollectionScanState &state
 	for (auto &[rowid, result_rowid] : inverted_index) {
 		column_data.FetchRowNew(transaction, cfs, rowid, result, result_rowid, fixed_string_len);
 	}
+	return;
+	int32_t *counter = new int32_t[128];
+	memset(counter, 0, sizeof(int32_t) * 128);
+	int heavy_hitter_idx = -1;
+	for (auto &[rowid, result_rowid] : inverted_index) {
+		counter[rowid & 127]++;
+		if (counter[rowid & 127] > inverted_index.size() / 10) {
+			heavy_hitter_idx = rowid & 127;
+			break;
+		}
+	}
+	unordered_map<int64_t, data_ptr_t> cached_result;
+	int entry_size = column_data.GetEntrySize();
+	for (auto &[rowid, result_rowid] : inverted_index) {
+		if ((rowid & 127) == heavy_hitter_idx && entry_size != 0) {
+			if (cached_result.find(rowid) == cached_result.end()) {
+				column_data.FetchRowNew(transaction, cfs, rowid, result, result_rowid, fixed_string_len);
+				cached_result[rowid] = result.GetData() + entry_size * result_rowid;
+			} else {
+				// copy result[rowid] to result[result_rowid]
+				auto target = result.GetData() + entry_size * result_rowid;
+				memcpy(target, cached_result[rowid], entry_size);
+			}
+		} else {
+			column_data.FetchRowNew(transaction, cfs, rowid, result, result_rowid, fixed_string_len);
+		}
+	}
 }
 
 void RowGroup::GetScalar(TransactionData transaction, CollectionScanState &state, Vector &result,

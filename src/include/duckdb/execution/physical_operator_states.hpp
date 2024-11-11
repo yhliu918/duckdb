@@ -166,6 +166,8 @@ struct OperatorSinkInput {
 	map<int64_t, int8_t> materialize_column_types;
 	int materialize_strategy_mode;
 	bool final_materilaize;
+	int rowid_col_idx;
+	bool keep_rowid;
 };
 
 struct OperatorSourceInput {
@@ -178,7 +180,7 @@ struct OperatorSourceInput {
 	unordered_map<int64_t, int32_t> fixed_len_strings_columns;
 	bool use_inverted_index;
 	std::unordered_map<int, std::unordered_map<int64_t, std::vector<int>>> *inverted_index;
-	std::unordered_map<int, std::vector<std::pair<int64_t, int>>> *inverted_indexnew;
+	std::vector<std::vector<std::pair<int64_t, int>>> *inverted_indexnew;
 };
 
 struct OperatorSinkCombineInput {

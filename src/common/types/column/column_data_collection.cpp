@@ -11,6 +11,7 @@
 #include "duckdb/storage/buffer_manager.hpp"
 
 #include <assert.h>
+#include <iostream>
 
 namespace duckdb {
 
@@ -839,10 +840,13 @@ void ColumnDataCollection::AppendMaterialize(ColumnDataAppendState &state, DataC
 	}
 	assert(remaining == 0);
 }
-
-void ColumnDataCollection::Append(ColumnDataAppendState &state, DataChunk &input, int fill_column_count) {
+void ColumnDataCollection::AppendMaterialzeNew(ColumnDataAppendState &state, DataChunk &input, int fill_column_count,
+                                               int start_column_id) {
 	if (fill_column_count == -1) {
 		fill_column_count = types.size();
+	}
+	if (fill_column_count == 0) {
+		return;
 	}
 	D_ASSERT(!finished_append);
 	// D_ASSERT(types == input.GetTypes());
@@ -862,10 +866,65 @@ void ColumnDataCollection::Append(ColumnDataAppendState &state, DataChunk &input
 		if (append_amount > 0) {
 			idx_t offset = input.size() - remaining;
 			for (idx_t vector_idx = 0; vector_idx < fill_column_count; vector_idx++) {
-				ColumnDataMetaData meta_data(copy_functions[vector_idx], segment, state, chunk_data,
+				ColumnDataMetaData meta_data(copy_functions[vector_idx + start_column_id], segment, state, chunk_data,
 				                             chunk_data.vector_data[vector_idx]);
-				copy_functions[vector_idx].function(meta_data, state.vector_data[vector_idx], input.data[vector_idx],
+				copy_functions[vector_idx + start_column_id].function(meta_data, state.vector_data[vector_idx],
+				                                                      input.data[vector_idx], offset, append_amount);
+			}
+			chunk_data.count += append_amount;
+		}
+		remaining -= append_amount;
+		if (remaining > 0) {
+			// more to do
+			// allocate a new chunk
+			segment.AllocateNewChunk();
+			segment.InitializeChunkState(segment.chunk_data.size() - 1, state.current_chunk_state);
+		}
+	}
+	segment.count += input.size();
+	count += input.size();
+}
+
+void ColumnDataCollection::Append(ColumnDataAppendState &state, DataChunk &input, int fill_column_count,
+                                  int rowid_column) {
+	if (fill_column_count == -1) {
+		fill_column_count = types.size();
+	}
+	if (fill_column_count == 0) {
+		return;
+	}
+	D_ASSERT(!finished_append);
+	// D_ASSERT(types == input.GetTypes());
+
+	auto &segment = *segments.back();
+	int input_iter = 0;
+	for (idx_t vector_idx = 0; vector_idx < fill_column_count; vector_idx++) {
+		if (input_iter == rowid_column) {
+			input_iter++;
+		}
+		if (IsComplexType(input.data[input_iter].GetType())) {
+			input.data[input_iter].Flatten(input.size());
+		}
+		input.data[input_iter].ToUnifiedFormat(input.size(), state.vector_data[vector_idx]);
+		input_iter++;
+	}
+
+	idx_t remaining = input.size();
+	while (remaining > 0) {
+		auto &chunk_data = segment.chunk_data.back();
+		idx_t append_amount = MinValue<idx_t>(remaining, STANDARD_VECTOR_SIZE - chunk_data.count);
+		input_iter = 0;
+		if (append_amount > 0) {
+			idx_t offset = input.size() - remaining;
+			for (idx_t vector_idx = 0; vector_idx < fill_column_count; vector_idx++) {
+				if (input_iter == rowid_column) {
+					input_iter++;
+				}
+				ColumnDataMetaData meta_data(copy_functions[input_iter], segment, state, chunk_data,
+				                             chunk_data.vector_data[vector_idx]);
+				copy_functions[input_iter].function(meta_data, state.vector_data[vector_idx], input.data[input_iter],
 				                                    offset, append_amount);
+				input_iter++;
 			}
 			chunk_data.count += append_amount;
 		}

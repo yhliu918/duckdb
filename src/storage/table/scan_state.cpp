@@ -162,7 +162,7 @@ bool CollectionScanState::Select(DuckTransaction &transaction, DataChunk &result
                                  std::unordered_map<int64_t, int64_t> &project_column_ids,
                                  std::unordered_map<int64_t, int32_t> &fixed_len_strings_columns,
                                  std::unordered_map<int, std::unordered_map<int64_t, std::vector<int>>> *inverted_index,
-                                 std::unordered_map<int, std::vector<std::pair<int64_t, int>>> *inverted_indexnew) {
+                                 std::vector<std::vector<std::pair<int64_t, int>>> *inverted_indexnew) {
 	auto cfs = ColumnFetchState();
 	if (inverted_index && inverted_index->size() > 0) {
 		for (auto &[row_group_index, row_group_inverted_index] : *inverted_index) {
@@ -180,8 +180,13 @@ bool CollectionScanState::Select(DuckTransaction &transaction, DataChunk &result
 		return true;
 	}
 	if (inverted_indexnew && inverted_indexnew->size() > 0) {
-		for (auto &[row_group_index, row_group_inverted_index] : *inverted_indexnew) {
-			auto row_group = row_groups->GetSegmentNode(row_group_index);
+		for (int i = 0; i < inverted_indexnew->size(); i++) {
+			auto row_group_inverted_index = inverted_indexnew->at(i);
+			if (int(row_group_inverted_index.size()) == 0) {
+				continue;
+			}
+
+			auto row_group = row_groups->GetSegmentNode(i);
 			for (auto [col_idx, result_col_idx] : project_column_ids) {
 				auto &result_vec = result.data[result_col_idx];
 				if (fixed_len_strings_columns.find(result_col_idx) != fixed_len_strings_columns.end()) {

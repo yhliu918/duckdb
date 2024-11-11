@@ -184,6 +184,7 @@ public:
 
 	//! Returns the [index] element of the Vector as a Value.
 	DUCKDB_API Value GetValue(idx_t index) const;
+	void CopyValue(idx_t source, idx_t target);
 	//! Sets the [index] element of the Vector to the specified Value.
 	DUCKDB_API void SetValue(idx_t index, const Value &val);
 
@@ -352,6 +353,11 @@ struct FlatVector {
 	static inline T GetValue(Vector &vector, idx_t idx) {
 		D_ASSERT(vector.GetVectorType() == VectorType::FLAT_VECTOR);
 		return FlatVector::GetData<T>(vector)[idx];
+	}
+	template <class T>
+	inline void GetValue(Vector &vector, idx_t idx, idx_t idx2) {
+		D_ASSERT(vector.GetVectorType() == VectorType::FLAT_VECTOR);
+		FlatVector::GetData<T>(vector)[idx2] = FlatVector::GetData<T>(vector)[idx];
 	}
 	static inline const ValidityMask &Validity(const Vector &vector) {
 		VerifyFlatVector(vector);

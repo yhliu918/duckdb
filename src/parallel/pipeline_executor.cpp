@@ -134,12 +134,10 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 		intermediate_chunks.push_back(std::move(chunk));
 	}
 
-	// if (pipeline.materialize_strategy_mode == 1) {
-	// 	inverted_index.reserve(100);
-	// 	// for (int i = 0; i < 100; i++) {
-	// 	// 	inverted_index[i].reserve(STANDARD_ROW_GROUPS_SIZE / 10);
-	// 	// }
-	// }
+	if (pipeline.materialize_strategy_mode == 1) {
+		inverted_indexnew.reserve(170);
+		inverted_indexnew.resize(170);
+	}
 
 	InitializeChunk(final_chunk);
 }
@@ -408,11 +406,21 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 			                              interrupt_state,
 			                              pipeline.materialize_flag,
 			                              pipeline.materialize_column_types,
-			                              pipeline.materialize_strategy_mode};
+			                              pipeline.materialize_strategy_mode,
+			                              false,
+			                              -1};
 			// if (pipeline.materialize_strategy_mode == 0) {
 			// 	sink_input.materialize_strategy_mode = 0;
 			// 	sink_input.materialize_column_types = pipeline.materialize_column_types;
 			// }
+			if (pipeline.materialize_flag) {
+				// sink_input.keep_rowid = true;
+				// sink_input.rowid_col_idx = -1;
+				sink_input.keep_rowid = false;
+				sink_input.rowid_col_idx = pipeline.rowid_col_idx;
+			} else {
+				sink_input.keep_rowid = true;
+			}
 			double sink_start = getNow();
 			auto sink_result = Sink(sink_chunk, sink_input);
 			double sink_end = getNow();
@@ -506,7 +514,8 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 		                              pipeline.materialize_flag,
 		                              pipeline.materialize_column_types,
 		                              pipeline.materialize_strategy_mode,
-		                              true};
+		                              true,
+		                              pipeline.rowid_col_idx};
 
 		pipeline.sink->Sink(context, mat_chunk, sink_input);
 	}

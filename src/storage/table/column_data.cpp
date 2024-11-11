@@ -531,6 +531,9 @@ void ColumnData::FetchRowNew(TransactionData &transaction, ColumnFetchState &sta
 
 	segment->FetchRow(state, rowid, result, MAX_ROW_ID);
 }
+int ColumnData::GetEntrySize() {
+	return data.nodes[0].node->type.InternalType() != PhysicalType::VARCHAR ? data.nodes[0].node->type_size : 0;
+}
 
 void ColumnData::FetchRowNew(TransactionData transaction, ColumnFetchState &state, row_t row_id, Vector &result,
                              idx_t result_idx, int32_t string_size) {

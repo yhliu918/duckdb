@@ -20,10 +20,21 @@ SinkResultType PhysicalMaterializedCollector::Sink(ExecutionContext &context, Da
 		// lstate.collection->InitializeAppend(types);
 		// lstate.append_state.vector_data.resize(lstate.collection->Types().size());
 		lstate.set_output = true;
-
-		lstate.collection->AppendMaterialize(lstate.append_state, chunk, input.materialize_column_types.size());
+		if (input.materialize_column_types.size() == lstate.collection->Types().size()) {
+			lstate.collection->AppendMaterialzeNew(lstate.append_state, chunk, input.materialize_column_types.size(),
+			                                       input.rowid_col_idx + 1);
+		} else {
+			lstate.collection->AppendMaterialize(lstate.append_state, chunk, input.materialize_column_types.size());
+		}
 	} else {
 		int origin_column_count = chunk.data.size();
+		if (!input.keep_rowid && input.materialize_flag) {
+			if (!lstate.set_output) {
+				lstate.collection->Types().erase(lstate.collection->Types().begin() + input.rowid_col_idx);
+			}
+			origin_column_count--;
+		}
+
 		if (input.materialize_flag && !lstate.set_output && input.materialize_column_types.size() > 0) {
 			for (auto [col, type] : input.materialize_column_types) {
 				lstate.collection->InitializeAppend(LogicalType(LogicalTypeId(type)));
@@ -33,8 +44,8 @@ SinkResultType PhysicalMaterializedCollector::Sink(ExecutionContext &context, Da
 		}
 		int fill_columns =
 		    input.materialize_strategy_mode == 0 ? lstate.collection->Types().size() : origin_column_count;
-
-		lstate.collection->Append(lstate.append_state, chunk, fill_columns);
+		int rowid_column = input.materialize_flag ? input.rowid_col_idx : -1;
+		lstate.collection->Append(lstate.append_state, chunk, fill_columns, rowid_column);
 	}
 	return SinkResultType::NEED_MORE_INPUT;
 }
