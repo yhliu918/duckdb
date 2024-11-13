@@ -97,6 +97,21 @@ void MetaPipeline::Ready() const {
 	}
 }
 
+int MetaPipeline::Readynew(int pipe_id) {
+	for (int i = 0; i < pipelines.size(); i++) {
+		pipelines[i]->Ready();
+		if (pipelines.size() > 1 && pipelines[i]->source->type != PhysicalOperatorType::TABLE_SCAN) {
+			continue;
+		}
+		pipelines[i]->pipeine_id = pipe_id++;
+	}
+	for (auto &child : children) {
+		int result_pipeid = child->Readynew(pipe_id);
+		pipe_id = result_pipeid;
+	}
+	return pipe_id;
+}
+
 MetaPipeline &MetaPipeline::CreateChildMetaPipeline(Pipeline &current, PhysicalOperator &op, MetaPipelineType type) {
 	children.push_back(make_shared_ptr<MetaPipeline>(executor, state, &op, type));
 	auto &child_meta_pipeline = *children.back().get();

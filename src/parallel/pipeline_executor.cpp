@@ -25,11 +25,59 @@ double getNow() {
 	gettimeofday(&tv, NULL);
 	return tv.tv_sec * 1000.0 + tv.tv_usec / 1000.0;
 }
+void parse_materialize_config(Pipeline &pipeline_p, bool read_mat_info = false) {
+	std::ifstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/pipeline" +
+	                       std::to_string(pipeline_p.pipeine_id),
+	                   std::ios::in);
+	if (file.is_open()) {
+		// basic config
+		int materialize_strategy_mode;
+		bool push_source;
+
+		file >> materialize_strategy_mode >> push_source;
+		pipeline_p.push_source = push_source;
+
+		// materialize info
+		if (read_mat_info) {
+			int groups_of_info;
+			file >> groups_of_info;
+			for (int i = 0; i < groups_of_info; i++) {
+				unordered_map<int64_t, int64_t> col_map;
+				map<int64_t, int8_t> col_types;
+				unordered_map<int64_t, int32_t> fixed_len_strings_columns;
+				int rowid_col_idx;
+				int keep_rowid;
+				idx_t table_col_idx;
+				idx_t result_col_idx;
+				int dependent_pipeline;
+				int logical_type;
+				int string_length = 0;
+				int lines = 0;
+				file >> dependent_pipeline >> keep_rowid >> rowid_col_idx >> lines;
+				for (int j = 0; j < lines; j++) {
+					file >> table_col_idx >> result_col_idx >> logical_type;
+					col_map[table_col_idx] = result_col_idx;
+					col_types[result_col_idx] = logical_type;
+					if (LogicalTypeId(logical_type) == LogicalTypeId::VARCHAR) {
+						file >> string_length;
+						fixed_len_strings_columns[result_col_idx] = string_length;
+					}
+				}
+				if (!col_map.empty()) {
+					pipeline_p.SetMaterializeMap(materialize_strategy_mode, rowid_col_idx, dependent_pipeline,
+					                             keep_rowid, col_map, col_types, fixed_len_strings_columns);
+				}
+			}
+		}
+		file.close();
+	}
+}
 
 PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_p)
     : pipeline(pipeline_p), thread(context_p), context(context_p, thread, &pipeline_p) {
 	D_ASSERT(pipeline.source_state);
 	int num = 0;
+	parse_materialize_config(pipeline, false);
 	if (pipeline.sink) {
 		local_sink_state = pipeline.sink->GetLocalSinkState(context);
 		requires_batch_index = pipeline.sink->RequiresBatchIndex() && pipeline.source->SupportsBatchIndex();
@@ -51,6 +99,9 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 		}
 	}
 	pipeline.mat_lock.lock();
+	for (int i = 0; i < pipeline.operators.size(); i++) {
+		pipeline.operator_state_set.push_back(0);
+	}
 	if (pipeline.operator_total_time.empty()) {
 		pipeline.operator_total_time.reserve(pipeline.operators.size() + 1);
 		for (idx_t i = 0; i < pipeline.operators.size() + 1; i++) {
@@ -68,42 +119,11 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 			auto &state = pipeline.operators[i].get().sink_state->Cast<HashJoinGlobalSinkState>();
 			pipeline.mat_lock.lock();
 			if (state.mat_table && state.source_state) {
-
-				if (pipeline.thread_num == num) {
-					pipeline.thread_num--;
-					pipeline.SetMaterializeSource(move(state.mat_table), state.source, move(state.source_state),
-					                              move(state.local_source_state));
-					if (pipeline.sink->type == PhysicalOperatorType::RESULT_COLLECTOR) {
-						std::ifstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/config", std::ios::in);
-						unordered_map<int64_t, int64_t> col_map;
-						map<int64_t, int8_t> col_types;
-						unordered_map<int64_t, int32_t> fixed_len_strings_columns;
-						int rowid_col_idx;
-						int materialize_strategy_mode;
-						if (file.is_open()) {
-							idx_t table_col_idx;
-							idx_t result_col_idx;
-							int logical_type;
-							int string_length = 0;
-							file >> materialize_strategy_mode;
-							file >> rowid_col_idx;
-
-							while (file >> table_col_idx >> result_col_idx >> logical_type) {
-								col_map[table_col_idx] = result_col_idx;
-								col_types[result_col_idx] = logical_type;
-								if (LogicalTypeId(logical_type) == LogicalTypeId::VARCHAR) {
-									file >> string_length;
-									fixed_len_strings_columns[result_col_idx] = string_length;
-								}
-							}
-							file.close();
-						}
-
-						if (!col_map.empty() && !pipeline.materialize_flag) {
-							pipeline.SetMaterializeMap(materialize_strategy_mode, rowid_col_idx, col_map, col_types,
-							                           fixed_len_strings_columns);
-						}
-					}
+				if (pipeline.operator_state_set[i] == 0) {
+					pipeline.operator_state_set[i] = 1;
+					pipeline.SetMaterializeSource(state.pipe_id, move(state.mat_table), state.source,
+					                              move(state.source_state), move(state.local_source_state));
+					parse_materialize_config(pipeline, true);
 				}
 			}
 			pipeline.mat_lock.unlock();
@@ -135,8 +155,15 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 	}
 
 	if (pipeline.materialize_strategy_mode == 1) {
-		inverted_indexnew.reserve(170);
-		inverted_indexnew.resize(170);
+		int row_id_column_number = pipeline.materialize_maps.size();
+		for (auto &[rowid_col_idx, mat_map] : pipeline.materialize_maps) {
+			inverted_indexnew[rowid_col_idx].reserve(200);
+			inverted_indexnew[rowid_col_idx].resize(200);
+			for (auto &[colid, type] : mat_map.materialize_column_types) {
+				pipeline.final_materialize_column_types[colid] = type;
+			}
+			result_index[rowid_col_idx] = 0;
+		}
 	}
 
 	InitializeChunk(final_chunk);
@@ -405,21 +432,14 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 			                              *local_sink_state,
 			                              interrupt_state,
 			                              pipeline.materialize_flag,
-			                              pipeline.materialize_column_types,
+			                              pipeline.final_materialize_column_types,
 			                              pipeline.materialize_strategy_mode,
-			                              false,
-			                              -1};
-			// if (pipeline.materialize_strategy_mode == 0) {
-			// 	sink_input.materialize_strategy_mode = 0;
-			// 	sink_input.materialize_column_types = pipeline.materialize_column_types;
-			// }
+			                              false};
+			// todo: the materialized result collector sink
 			if (pipeline.materialize_flag) {
-				// sink_input.keep_rowid = true;
-				// sink_input.rowid_col_idx = -1;
-				sink_input.keep_rowid = false;
-				sink_input.rowid_col_idx = pipeline.rowid_col_idx;
-			} else {
-				sink_input.keep_rowid = true;
+				for (auto &[rowid, mat_map] : pipeline.materialize_maps) {
+					sink_input.colid_keep_rowid[rowid] = mat_map.keep_rowid;
+				}
 			}
 			double sink_start = getNow();
 			auto sink_result = Sink(sink_chunk, sink_input);
@@ -437,15 +457,18 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 			double materialize_start = getNow();
 
 			if (pipeline.materialize_strategy_mode == 1) {
-				auto sel_vec = sink_chunk.data[pipeline.rowid_col_idx];
-				int64_t *sel = reinterpret_cast<int64_t *>(sel_vec.GetData());
-				for (int64_t i = 0; i < sink_chunk.size(); i++) {
-					auto rowid = sel[i];
-					// inverted_indexnew[rowid / STANDARD_ROW_GROUPS_SIZE][rowid].emplace_back(result_index++);
-					// inverted_index[rowid / STANDARD_ROW_GROUPS_SIZE][rowid].emplace_back(result_index++);
-
-					inverted_indexnew[rowid / STANDARD_ROW_GROUPS_SIZE].emplace_back(
-					    std::make_pair(rowid, result_index++));
+				for (auto &[rowid_col_idx, mat_map] : pipeline.materialize_maps) {
+					auto sel_vec = sink_chunk.data[rowid_col_idx];
+					int64_t *sel = reinterpret_cast<int64_t *>(sel_vec.GetData());
+					int &index = result_index[rowid_col_idx];
+					for (int64_t i = 0; i < sink_chunk.size(); i++) {
+						auto rowid = sel[i];
+						// inverted_indexnew[rowid / STANDARD_ROW_GROUPS_SIZE][rowid].emplace_back(result_index++);
+						// inverted_index[rowid / STANDARD_ROW_GROUPS_SIZE][rowid].emplace_back(result_index++);
+						std::cout << index << " " << rowid << std::endl;
+						inverted_indexnew[rowid_col_idx][rowid / STANDARD_ROW_GROUPS_SIZE].emplace_back(
+						    std::make_pair(rowid, index++));
+					}
 				}
 			}
 
@@ -479,43 +502,51 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 		// materialize the inverted index columns and sink->Sink
 		auto &last_op = pipeline.operators.empty() ? *pipeline.source : pipeline.operators.back().get();
 		int origin_output_count = last_op.GetTypes().size();
+
 		vector<LogicalType> types;
-		for (auto &[col_id, type] : pipeline.materialize_column_types) {
+		for (auto &[col_id, type] : pipeline.final_materialize_column_types) {
 			types.push_back(LogicalType(LogicalTypeId(type)));
 		}
 		DataChunk mat_chunk;
-		mat_chunk.Initialize(Allocator::DefaultAllocator(), types, result_index);
-		unordered_map<int64_t, int64_t> materialize_column_ids_new;
-		for (auto &[col_idx, result_col_index] : pipeline.materialize_column_ids) {
-			materialize_column_ids_new[col_idx] = result_col_index - origin_output_count;
-		}
-		unordered_map<int64_t, int32_t> fixed_len_strings_columns_new;
-		for (auto &[col_index, length] : pipeline.fixed_len_strings_columns) {
-			fixed_len_strings_columns_new[col_index - origin_output_count] = length;
-		}
-		OperatorSourceInput source_input = {*pipeline.materialize_source_state,
-		                                    *pipeline.materialize_local_source_state,
-		                                    interrupt_state,
-		                                    true,
-		                                    pipeline.rowid_col_idx,
-		                                    materialize_column_ids_new,
-		                                    fixed_len_strings_columns_new,
-		                                    true,
-		                                    nullptr,
-		                                    &inverted_indexnew};
-		mat_chunk.SetCardinality(result_index);
-		// std::cout << "cardinality " << result_index << std::endl;
-		auto res = pipeline.materialize_source->GetData(context, mat_chunk, source_input);
+		mat_chunk.Initialize(Allocator::DefaultAllocator(), types, result_index.begin()->second);
+		unordered_map<int, bool> colid_keep_rowid;
+		for (auto &[rowid_col_idx, mat_map] : pipeline.materialize_maps) {
+			colid_keep_rowid[rowid_col_idx] = mat_map.keep_rowid;
+			unordered_map<int64_t, int64_t> materialize_column_ids_new;
+			for (auto &[col_idx, result_col_index] : mat_map.materialize_column_ids) {
+				materialize_column_ids_new[col_idx] = result_col_index - origin_output_count;
+			}
+			unordered_map<int64_t, int32_t> fixed_len_strings_columns_new;
+			for (auto &[col_index, length] : mat_map.fixed_len_strings_columns) {
+				fixed_len_strings_columns_new[col_index - origin_output_count] = length;
+			}
+			auto &mat_source = pipeline.materialize_sources[mat_map.source_pipeline_id];
+			OperatorSourceInput source_input = {*mat_source.materialize_source_state,
+			                                    *mat_source.materialize_local_source_state,
+			                                    interrupt_state,
+			                                    true,
+			                                    rowid_col_idx,
+			                                    materialize_column_ids_new,
+			                                    fixed_len_strings_columns_new,
+			                                    true,
+			                                    nullptr,
+			                                    &inverted_indexnew[rowid_col_idx]};
 
-		// std::cout << "get data" << std::endl;
+			// std::cout << "cardinality " << result_index << std::endl;
+			auto res = mat_source.materialize_source->GetData(context, mat_chunk, source_input);
+		}
+		mat_chunk.SetCardinality(result_index.begin()->second);
+
+		// write the final result
+
 		OperatorSinkInput sink_input {*pipeline.sink->sink_state,
 		                              *local_sink_state,
 		                              interrupt_state,
 		                              pipeline.materialize_flag,
-		                              pipeline.materialize_column_types,
+		                              pipeline.final_materialize_column_types,
 		                              pipeline.materialize_strategy_mode,
 		                              true,
-		                              pipeline.rowid_col_idx};
+		                              colid_keep_rowid};
 
 		pipeline.sink->Sink(context, mat_chunk, sink_input);
 	}
@@ -551,10 +582,11 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 		intermediate_states[i]->Finalize(pipeline.operators[i].get(), context);
 	}
 	pipeline.mat_lock.lock();
-	if (pipeline.sink->type == PhysicalOperatorType::HASH_JOIN) {
+	if (pipeline.sink->type == PhysicalOperatorType::HASH_JOIN && pipeline.push_source) {
 		pipeline.thread_num--;
 		if (pipeline.thread_num == 0) {
 			pipeline.sink->sink_state->Cast<HashJoinGlobalSinkState>().SetSource(
+			    pipeline.pipeine_id,
 			    pipeline.source.get()
 			        ->Cast<PhysicalTableScan>()
 			        .bind_data->Cast<TableScanBindData>()
@@ -565,7 +597,7 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 	}
 
 	bool print = pipeline.operators.size() > 0 || pipeline.sink->type != PhysicalOperatorType::CREATE_TABLE_AS;
-	print = false;
+	// print = false;
 	if (print) {
 		std::cout << "----------------------------" << std::endl;
 		for (int i = 0; i < pipeline.operator_total_time.size() - 1; i++) {
@@ -648,36 +680,37 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 			                                          *intermediate_states[current_intermediate - 1]);
 			double op_end = getNow();
 			pipeline.incrementOperatorTime(op_end - op_start, operator_idx);
-			if (pipeline.materialize_flag && operator_idx == pipeline.operators.size() - 1 &&
-			    pipeline.materialize_strategy_mode == 0) {
-				double mat_start = getNow();
-				OperatorSourceInput source_input = {*pipeline.materialize_source_state,
-				                                    *pipeline.materialize_local_source_state,
-				                                    interrupt_state,
-				                                    true,
-				                                    pipeline.rowid_col_idx,
-				                                    pipeline.materialize_column_ids,
-				                                    pipeline.fixed_len_strings_columns,
-				                                    false};
-				// std::cout << std::this_thread::get_id() << " " << pipeline.materialize_column_ids.size() << " "
-				//           << pipeline.materialize_column_types.size() << " "
-				//           << (pipeline.materialize_source_state != nullptr) << " "
-				//           << (pipeline.materialize_local_source_state != nullptr) << " " <<
-				//           current_chunk.ColumnCount()
-				//           << " " << result.ColumnCount() << std::endl;
-				// result.ReferenceColumns(current_chunk, {0, 1});
-				for (idx_t col_idx = 0; col_idx < current_chunk.ColumnCount(); col_idx++) {
-					auto &other_col = current_chunk.data[col_idx];
-					auto &this_col = result.data[col_idx];
-					D_ASSERT(other_col.GetType() == this_col.GetType());
-					this_col.Reference(other_col);
-				}
-				result.SetCardinality(current_chunk.size());
-				auto res = pipeline.materialize_source->GetData(context, result, source_input);
-				// std::cout << "get data!" << result.size() << std::endl;
-				double mat_end = getNow();
-				pipeline.mat_operator_time += mat_end - mat_start;
-			}
+			// FIX me: if we need to support materialize strategy 0
+			//  if (pipeline.materialize_flag && operator_idx == pipeline.operators.size() - 1 &&
+			//      pipeline.materialize_strategy_mode == 0) {
+			//  	double mat_start = getNow();
+			//  	OperatorSourceInput source_input = {*pipeline.materialize_source_state,
+			//  	                                    *pipeline.materialize_local_source_state,
+			//  	                                    interrupt_state,
+			//  	                                    true,
+			//  	                                    pipeline.rowid_col_idx,
+			//  	                                    pipeline.materialize_column_ids,
+			//  	                                    pipeline.fixed_len_strings_columns,
+			//  	                                    false};
+			//  	// std::cout << std::this_thread::get_id() << " " << pipeline.materialize_column_ids.size() << " "
+			//  	//           << pipeline.materialize_column_types.size() << " "
+			//  	//           << (pipeline.materialize_source_state != nullptr) << " "
+			//  	//           << (pipeline.materialize_local_source_state != nullptr) << " " <<
+			//  	//           current_chunk.ColumnCount()
+			//  	//           << " " << result.ColumnCount() << std::endl;
+			//  	// result.ReferenceColumns(current_chunk, {0, 1});
+			//  	for (idx_t col_idx = 0; col_idx < current_chunk.ColumnCount(); col_idx++) {
+			//  		auto &other_col = current_chunk.data[col_idx];
+			//  		auto &this_col = result.data[col_idx];
+			//  		D_ASSERT(other_col.GetType() == this_col.GetType());
+			//  		this_col.Reference(other_col);
+			//  	}
+			//  	result.SetCardinality(current_chunk.size());
+			//  	auto res = pipeline.materialize_source->GetData(context, result, source_input);
+			//  	// std::cout << "get data!" << result.size() << std::endl;
+			//  	double mat_end = getNow();
+			//  	pipeline.mat_operator_time += mat_end - mat_start;
+			//  }
 
 			EndOperator(current_operator, &current_chunk);
 			if (op_result == OperatorResultType::HAVE_MORE_OUTPUT) {
@@ -780,7 +813,7 @@ void PipelineExecutor::InitializeChunk(DataChunk &chunk) {
 		if (pipeline.sink->type == PhysicalOperatorType::RESULT_COLLECTOR && pipeline.operators.size() > 0 &&
 		    pipeline.materialize_strategy_mode == 0) {
 			pipeline.mat_lock.lock();
-			for (auto &[col_id, type] : pipeline.materialize_column_types) {
+			for (auto &[col_id, type] : pipeline.final_materialize_column_types) {
 				types.push_back(LogicalType(LogicalTypeId(type)));
 			}
 			pipeline.mat_lock.unlock();

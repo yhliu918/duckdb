@@ -75,10 +75,10 @@ public:
 	void InitializeAppend(vector<LogicalType> &type);
 	//! Append a DataChunk to this ColumnDataCollection using the specified append state
 	DUCKDB_API void Append(ColumnDataAppendState &state, DataChunk &new_chunk, int fill_column_count = -1,
-	                       int rowid_column = -1);
+	                       unordered_map<int, int> *column_map = nullptr);
 
 	void AppendMaterialize(ColumnDataAppendState &state, DataChunk &new_chunk, int append_column_count);
-	void AppendMaterialzeNew(ColumnDataAppendState &state, DataChunk &input, int fill_column_count, int rowid_column);
+	void AppendMaterialzeNew(ColumnDataAppendState &state, DataChunk &input, int fill_column_count);
 
 	//! Initializes a chunk with the correct types that can be used to call Scan
 	DUCKDB_API void InitializeScanChunk(DataChunk &chunk) const;

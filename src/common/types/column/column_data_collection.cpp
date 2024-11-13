@@ -827,12 +827,14 @@ void ColumnDataCollection::AppendMaterialize(ColumnDataAppendState &state, DataC
 		for (auto &chunk_data : segment->chunk_data) {
 			// chunk_data.vector_data.resize(types.size());
 			int idx = 0;
+			int copy_function_idx = copy_functions.size() - append_column_count;
 			for (idx_t vector_idx = types.size() - append_column_count; vector_idx < types.size(); vector_idx++) {
-				ColumnDataMetaData meta_data(copy_functions[vector_idx], *segment, state, chunk_data,
+				ColumnDataMetaData meta_data(copy_functions[copy_function_idx], *segment, state, chunk_data,
 				                             chunk_data.vector_data[vector_idx]);
-				copy_functions[vector_idx].function(meta_data, state.vector_data[vector_idx], input.data[idx], offset,
-				                                    chunk_data.count);
+				copy_functions[copy_function_idx].function(meta_data, state.vector_data[vector_idx], input.data[idx],
+				                                           offset, chunk_data.count);
 				idx++;
+				copy_function_idx++;
 			}
 			remaining -= chunk_data.count;
 			offset += chunk_data.count;
@@ -840,8 +842,7 @@ void ColumnDataCollection::AppendMaterialize(ColumnDataAppendState &state, DataC
 	}
 	assert(remaining == 0);
 }
-void ColumnDataCollection::AppendMaterialzeNew(ColumnDataAppendState &state, DataChunk &input, int fill_column_count,
-                                               int start_column_id) {
+void ColumnDataCollection::AppendMaterialzeNew(ColumnDataAppendState &state, DataChunk &input, int fill_column_count) {
 	if (fill_column_count == -1) {
 		fill_column_count = types.size();
 	}
@@ -850,26 +851,33 @@ void ColumnDataCollection::AppendMaterialzeNew(ColumnDataAppendState &state, Dat
 	}
 	D_ASSERT(!finished_append);
 	// D_ASSERT(types == input.GetTypes());
-
+	int end = types.size() - 1;
+	int start = end - fill_column_count;
 	auto &segment = *segments.back();
-	for (idx_t vector_idx = 0; vector_idx < fill_column_count; vector_idx++) {
-		if (IsComplexType(input.data[vector_idx].GetType())) {
-			input.data[vector_idx].Flatten(input.size());
+	int input_iter = fill_column_count - 1;
+	for (int vector_idx = end; vector_idx > start; vector_idx--) {
+		if (IsComplexType(input.data[input_iter].GetType())) {
+			input.data[input_iter].Flatten(input.size());
 		}
-		input.data[vector_idx].ToUnifiedFormat(input.size(), state.vector_data[vector_idx]);
+		input.data[input_iter].ToUnifiedFormat(input.size(), state.vector_data[vector_idx]);
+		input_iter--;
 	}
 
 	idx_t remaining = input.size();
 	while (remaining > 0) {
 		auto &chunk_data = segment.chunk_data.back();
 		idx_t append_amount = MinValue<idx_t>(remaining, STANDARD_VECTOR_SIZE - chunk_data.count);
+		int input_iter = fill_column_count - 1;
+		int copy_function_idx = copy_functions.size() - 1;
 		if (append_amount > 0) {
 			idx_t offset = input.size() - remaining;
-			for (idx_t vector_idx = 0; vector_idx < fill_column_count; vector_idx++) {
-				ColumnDataMetaData meta_data(copy_functions[vector_idx + start_column_id], segment, state, chunk_data,
+			for (int vector_idx = end; vector_idx > start; vector_idx--) {
+				ColumnDataMetaData meta_data(copy_functions[copy_function_idx], segment, state, chunk_data,
 				                             chunk_data.vector_data[vector_idx]);
-				copy_functions[vector_idx + start_column_id].function(meta_data, state.vector_data[vector_idx],
-				                                                      input.data[vector_idx], offset, append_amount);
+				copy_functions[copy_function_idx].function(meta_data, state.vector_data[vector_idx],
+				                                           input.data[input_iter], offset, append_amount);
+				input_iter--;
+				copy_function_idx--;
 			}
 			chunk_data.count += append_amount;
 		}
@@ -886,7 +894,7 @@ void ColumnDataCollection::AppendMaterialzeNew(ColumnDataAppendState &state, Dat
 }
 
 void ColumnDataCollection::Append(ColumnDataAppendState &state, DataChunk &input, int fill_column_count,
-                                  int rowid_column) {
+                                  unordered_map<int, int> *column_map) {
 	if (fill_column_count == -1) {
 		fill_column_count = types.size();
 	}
@@ -897,34 +905,24 @@ void ColumnDataCollection::Append(ColumnDataAppendState &state, DataChunk &input
 	// D_ASSERT(types == input.GetTypes());
 
 	auto &segment = *segments.back();
-	int input_iter = 0;
-	for (idx_t vector_idx = 0; vector_idx < fill_column_count; vector_idx++) {
-		if (input_iter == rowid_column) {
-			input_iter++;
+	for (auto [input_idx, column_idx] : *column_map) {
+		if (IsComplexType(input.data[input_idx].GetType())) {
+			input.data[input_idx].Flatten(input.size());
 		}
-		if (IsComplexType(input.data[input_iter].GetType())) {
-			input.data[input_iter].Flatten(input.size());
-		}
-		input.data[input_iter].ToUnifiedFormat(input.size(), state.vector_data[vector_idx]);
-		input_iter++;
+		input.data[input_idx].ToUnifiedFormat(input.size(), state.vector_data[column_idx]);
 	}
 
 	idx_t remaining = input.size();
 	while (remaining > 0) {
 		auto &chunk_data = segment.chunk_data.back();
 		idx_t append_amount = MinValue<idx_t>(remaining, STANDARD_VECTOR_SIZE - chunk_data.count);
-		input_iter = 0;
 		if (append_amount > 0) {
 			idx_t offset = input.size() - remaining;
-			for (idx_t vector_idx = 0; vector_idx < fill_column_count; vector_idx++) {
-				if (input_iter == rowid_column) {
-					input_iter++;
-				}
-				ColumnDataMetaData meta_data(copy_functions[input_iter], segment, state, chunk_data,
-				                             chunk_data.vector_data[vector_idx]);
-				copy_functions[input_iter].function(meta_data, state.vector_data[vector_idx], input.data[input_iter],
-				                                    offset, append_amount);
-				input_iter++;
+			for (auto [input_idx, column_idx] : *column_map) {
+				ColumnDataMetaData meta_data(copy_functions[input_idx], segment, state, chunk_data,
+				                             chunk_data.vector_data[column_idx]);
+				copy_functions[input_idx].function(meta_data, state.vector_data[column_idx], input.data[input_idx],
+				                                   offset, append_amount);
 			}
 			chunk_data.count += append_amount;
 		}

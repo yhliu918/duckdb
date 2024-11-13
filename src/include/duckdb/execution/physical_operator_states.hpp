@@ -166,8 +166,7 @@ struct OperatorSinkInput {
 	map<int64_t, int8_t> materialize_column_types;
 	int materialize_strategy_mode;
 	bool final_materilaize;
-	int rowid_col_idx;
-	bool keep_rowid;
+	unordered_map<int, bool> colid_keep_rowid; // first: rowid_col_idx, second: keep_rowid
 };
 
 struct OperatorSourceInput {

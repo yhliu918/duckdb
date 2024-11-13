@@ -51,6 +51,7 @@ public:
 	unique_ptr<ColumnDataCollection> collection;
 	ColumnDataAppendState append_state;
 	bool set_output = false;
+	unordered_map<int, int> column_map;
 };
 
 } // namespace duckdb

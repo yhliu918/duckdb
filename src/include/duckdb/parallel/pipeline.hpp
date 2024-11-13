@@ -121,27 +121,88 @@ public:
 	//! Updates the batch index of a pipeline (and returns the new minimum batch index)
 	idx_t UpdateBatchIndex(idx_t old_index, idx_t new_index);
 
-	void SetMaterializeSource(shared_ptr<RowGroupCollection> table, optional_ptr<PhysicalOperator> op,
+	struct MatSourceInfo {
+		MatSourceInfo() = default;
+		MatSourceInfo(shared_ptr<RowGroupCollection> table, optional_ptr<PhysicalOperator> op,
+		              unique_ptr<GlobalSourceState> state, unique_ptr<LocalSourceState> local_state) {
+			this->table = table;
+			this->materialize_source = op;
+			this->materialize_source_state = move(state);
+			this->materialize_local_source_state = move(local_state);
+		}
+		MatSourceInfo(MatSourceInfo &&info) noexcept {
+			this->table = std::move(info.table);
+			this->materialize_source = std::move(info.materialize_source);
+			this->materialize_source_state = std::move(info.materialize_source_state);
+			this->materialize_local_source_state = std::move(info.materialize_local_source_state);
+		}
+		MatSourceInfo &operator=(MatSourceInfo &&info) noexcept {
+			if (this != &info) {
+				this->table = std::move(info.table);
+				this->materialize_source = std::move(info.materialize_source);
+				this->materialize_source_state = std::move(info.materialize_source_state);
+				this->materialize_local_source_state = std::move(info.materialize_local_source_state);
+			}
+			return *this;
+		}
+		shared_ptr<RowGroupCollection> table;
+		optional_ptr<PhysicalOperator> materialize_source;
+		unique_ptr<GlobalSourceState> materialize_source_state;
+		unique_ptr<LocalSourceState> materialize_local_source_state;
+	};
+
+	void SetMaterializeSource(int pipe_id, shared_ptr<RowGroupCollection> table, optional_ptr<PhysicalOperator> op,
 	                          unique_ptr<GlobalSourceState> state, unique_ptr<LocalSourceState> local_state) {
-		mat_table = table;
-		materialize_source = op;
-		materialize_source_state = move(state);
-		materialize_local_source_state = move(local_state);
+		materialize_sources[pipe_id] = MatSourceInfo(table, move(op), move(state), move(local_state));
 	}
 
-	void SetMaterializeMap(int strategy, int col_idx, unordered_map<int64_t, int64_t> colid, map<int64_t, int8_t> types,
+	struct MaterializeMap {
+		MaterializeMap(int pipeid, bool keep_rowid, unordered_map<int64_t, int64_t> colid, map<int64_t, int8_t> types,
+		               unordered_map<int64_t, int32_t> string_columns) {
+			this->source_pipeline_id = pipeid;
+			this->keep_rowid = keep_rowid;
+			this->materialize_column_ids = move(colid);
+			this->materialize_column_types = move(types);
+			this->fixed_len_strings_columns = move(string_columns);
+		}
+		MaterializeMap() = default;
+		MaterializeMap &operator=(MaterializeMap &&map) noexcept {
+			if (this != &map) {
+				this->source_pipeline_id = map.source_pipeline_id;
+				this->keep_rowid = map.keep_rowid;
+				this->materialize_column_ids = move(map.materialize_column_ids);
+				this->materialize_column_types = move(map.materialize_column_types);
+				this->fixed_len_strings_columns = move(map.fixed_len_strings_columns);
+			}
+			return *this;
+		}
+		MaterializeMap(MaterializeMap &map) {
+			this->source_pipeline_id = map.source_pipeline_id;
+			this->keep_rowid = map.keep_rowid;
+			this->materialize_column_ids = move(map.materialize_column_ids);
+			this->materialize_column_types = move(map.materialize_column_types);
+			this->fixed_len_strings_columns = move(map.fixed_len_strings_columns);
+		}
+		int source_pipeline_id;
+		bool keep_rowid;
+		unordered_map<int64_t, int64_t> materialize_column_ids;
+		map<int64_t, int8_t> materialize_column_types;
+		unordered_map<int64_t, int32_t> fixed_len_strings_columns;
+	};
+
+	void SetMaterializeMap(int strategy, int col_idx, int pipeline_id, bool keep_rowid,
+	                       unordered_map<int64_t, int64_t> colid, map<int64_t, int8_t> types,
 	                       unordered_map<int64_t, int32_t> string_columns) {
 		materialize_strategy_mode = strategy;
-		rowid_col_idx = col_idx;
-		materialize_column_ids = move(colid);
-		materialize_column_types = move(types);
-		fixed_len_strings_columns = move(string_columns);
 		materialize_flag = true;
+		materialize_maps[col_idx] =
+		    MaterializeMap(pipeline_id, keep_rowid, move(colid), move(types), move(string_columns));
 	}
 
 	bool materialize_flag = false;
 	std::mutex mat_lock;
-	int thread_num = 0;
+	std::vector<int> operator_state_set;
+	int thread_num;
 	void incrementOperatorTime(double time, int op_idx) {
 		operator_total_time[op_idx] += time;
 	}
@@ -150,6 +211,12 @@ public:
 	double mat_operator_time = 0;
 	double map_building_time = 0;
 	double total_time = 0;
+	int pipeine_id = 0;
+	bool push_source = false;
+	unordered_map<int, MaterializeMap> materialize_maps;   // rowid_col_idx -> MaterializeMap
+	unordered_map<int, MatSourceInfo> materialize_sources; // pipelineid -> MatSourceInfo
+
+	map<int64_t, int8_t> final_materialize_column_types; // output layout
 
 private:
 	//! Whether or not the pipeline has been readied
@@ -159,14 +226,6 @@ private:
 	//! The source of this pipeline
 	optional_ptr<PhysicalOperator> source;
 
-	optional_ptr<PhysicalOperator> materialize_source;
-	unique_ptr<GlobalSourceState> materialize_source_state;
-	unique_ptr<LocalSourceState> materialize_local_source_state;
-	shared_ptr<RowGroupCollection> mat_table;
-	unordered_map<int64_t, int64_t> materialize_column_ids;
-	map<int64_t, int8_t> materialize_column_types;
-	unordered_map<int64_t, int32_t> fixed_len_strings_columns;
-	int rowid_col_idx;
 	int materialize_strategy_mode;
 
 	//! The chain of intermediate operators

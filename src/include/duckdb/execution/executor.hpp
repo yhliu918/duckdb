@@ -39,6 +39,7 @@ class Executor {
 
 public:
 	static constexpr idx_t WAIT_TIME = 20;
+	int current_pipeline_id = 0;
 
 public:
 	explicit Executor(ClientContext &context);
