@@ -31,6 +31,9 @@ public:
 		source_state = move(source_state_p);
 		local_source_state = move(local_source_state_p);
 	}
+	void SetMaterializeSource(unordered_map<int, MatSourceInfo> &&sources) {
+		materialize_sources = move(sources);
+	}
 
 public:
 	ClientContext &context;
@@ -71,6 +74,7 @@ public:
 	unique_ptr<LocalSourceState> local_source_state;
 	shared_ptr<RowGroupCollection> mat_table;
 	int pipe_id;
+	unordered_map<int, MatSourceInfo> materialize_sources;
 };
 //! PhysicalHashJoin represents a hash loop join between two tables
 class PhysicalHashJoin : public PhysicalComparisonJoin {

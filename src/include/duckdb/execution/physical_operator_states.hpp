@@ -16,6 +16,7 @@
 #include "duckdb/execution/execution_context.hpp"
 #include "duckdb/optimizer/join_order/join_node.hpp"
 #include "duckdb/parallel/interrupt.hpp"
+#include "duckdb/storage/table/row_group_collection.hpp"
 
 namespace duckdb {
 class Event;
@@ -197,6 +198,35 @@ struct OperatorSinkNextBatchInput {
 	GlobalSinkState &global_state;
 	LocalSinkState &local_state;
 	InterruptState &interrupt_state;
+};
+struct MatSourceInfo {
+	MatSourceInfo() = default;
+	MatSourceInfo(shared_ptr<RowGroupCollection> table, optional_ptr<PhysicalOperator> op,
+	              unique_ptr<GlobalSourceState> state, unique_ptr<LocalSourceState> local_state) {
+		this->table = table;
+		this->materialize_source = op;
+		this->materialize_source_state = move(state);
+		this->materialize_local_source_state = move(local_state);
+	}
+	MatSourceInfo(MatSourceInfo &&info) noexcept {
+		this->table = std::move(info.table);
+		this->materialize_source = std::move(info.materialize_source);
+		this->materialize_source_state = std::move(info.materialize_source_state);
+		this->materialize_local_source_state = std::move(info.materialize_local_source_state);
+	}
+	MatSourceInfo &operator=(MatSourceInfo &&info) noexcept {
+		if (this != &info) {
+			this->table = std::move(info.table);
+			this->materialize_source = std::move(info.materialize_source);
+			this->materialize_source_state = std::move(info.materialize_source_state);
+			this->materialize_local_source_state = std::move(info.materialize_local_source_state);
+		}
+		return *this;
+	}
+	shared_ptr<RowGroupCollection> table;
+	optional_ptr<PhysicalOperator> materialize_source;
+	unique_ptr<GlobalSourceState> materialize_source_state;
+	unique_ptr<LocalSourceState> materialize_local_source_state;
 };
 
 // LCOV_EXCL_STOP

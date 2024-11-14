@@ -77,6 +77,7 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
     : pipeline(pipeline_p), thread(context_p), context(context_p, thread, &pipeline_p) {
 	D_ASSERT(pipeline.source_state);
 	int num = 0;
+	// std::cout << pipeline.pipeine_id << " " << pipeline.ToString() << std::endl;
 	parse_materialize_config(pipeline, false);
 	if (pipeline.sink) {
 		local_sink_state = pipeline.sink->GetLocalSinkState(context);
@@ -123,6 +124,14 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 					pipeline.operator_state_set[i] = 1;
 					pipeline.SetMaterializeSource(state.pipe_id, move(state.mat_table), state.source,
 					                              move(state.source_state), move(state.local_source_state));
+					if (state.materialize_sources.size() > 0) {
+						for (auto &source : state.materialize_sources) {
+							pipeline.SetMaterializeSource(source.first, move(source.second.table),
+							                              source.second.materialize_source,
+							                              move(source.second.materialize_source_state),
+							                              move(source.second.materialize_local_source_state));
+						}
+					}
 					parse_materialize_config(pipeline, true);
 				}
 			}
@@ -465,7 +474,7 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 						auto rowid = sel[i];
 						// inverted_indexnew[rowid / STANDARD_ROW_GROUPS_SIZE][rowid].emplace_back(result_index++);
 						// inverted_index[rowid / STANDARD_ROW_GROUPS_SIZE][rowid].emplace_back(result_index++);
-						std::cout << index << " " << rowid << std::endl;
+						// std::cout << rowid_col_idx << " " << index << " " << rowid << std::endl;
 						inverted_indexnew[rowid_col_idx][rowid / STANDARD_ROW_GROUPS_SIZE].emplace_back(
 						    std::make_pair(rowid, index++));
 					}
@@ -593,6 +602,8 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 			        .table.GetDataTable()
 			        ->GetRowGroupCollection(),
 			    pipeline.source, move(pipeline.source_state), move(local_source_state));
+			pipeline.sink->sink_state->Cast<HashJoinGlobalSinkState>().SetMaterializeSource(
+			    std::move(pipeline.materialize_sources));
 		}
 	}
 
@@ -692,7 +703,8 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 			//  	                                    pipeline.materialize_column_ids,
 			//  	                                    pipeline.fixed_len_strings_columns,
 			//  	                                    false};
-			//  	// std::cout << std::this_thread::get_id() << " " << pipeline.materialize_column_ids.size() << " "
+			//  	// std::cout << std::this_thread::get_id() << " " << pipeline.materialize_column_ids.size() << "
+			//  "
 			//  	//           << pipeline.materialize_column_types.size() << " "
 			//  	//           << (pipeline.materialize_source_state != nullptr) << " "
 			//  	//           << (pipeline.materialize_local_source_state != nullptr) << " " <<

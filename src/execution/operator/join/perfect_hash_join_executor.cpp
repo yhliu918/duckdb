@@ -11,6 +11,7 @@ PerfectHashJoinExecutor::PerfectHashJoinExecutor(const PhysicalHashJoin &join_p,
 }
 
 bool PerfectHashJoinExecutor::CanDoPerfectHashJoin() {
+	return false;
 	return perfect_join_statistics.is_build_small;
 }
 
@@ -19,6 +20,7 @@ bool PerfectHashJoinExecutor::CanDoPerfectHashJoin() {
 //===--------------------------------------------------------------------===//
 bool PerfectHashJoinExecutor::BuildPerfectHashTable(LogicalType &key_type) {
 	// First, allocate memory for each build column
+	// key_type = LogicalType::UINTEGER;
 	auto build_size = perfect_join_statistics.build_range + 1;
 	for (const auto &type : join.rhs_output_types) {
 		perfect_hash_table.emplace_back(type, build_size);
@@ -29,7 +31,7 @@ bool PerfectHashJoinExecutor::BuildPerfectHashTable(LogicalType &key_type) {
 	memset(bitmap_build_idx.get(), 0, sizeof(bool) * build_size); // set false
 
 	// Now fill columns with build data
-
+	std::cout << key_type.ToString() << std::endl;
 	return FullScanHashTable(key_type);
 }
 
@@ -115,6 +117,7 @@ bool PerfectHashJoinExecutor::TemplatedFillSelectionVectorBuild(Vector &source, 
 	}
 	auto min_value = perfect_join_statistics.build_min.GetValueUnsafe<T>();
 	auto max_value = perfect_join_statistics.build_max.GetValueUnsafe<T>();
+	std::cout << min_value << " " << max_value << std::endl;
 	UnifiedVectorFormat vector_data;
 	source.ToUnifiedFormat(count, vector_data);
 	auto data = reinterpret_cast<T *>(vector_data.data);
@@ -192,6 +195,12 @@ OperatorResultType PerfectHashJoinExecutor::ProbePerfectHashTable(ExecutionConte
 		auto &result_vector = result.data[input.ColumnCount() + i];
 		D_ASSERT(result_vector.GetType() == ht.layout.GetTypes()[ht.output_columns[i]]);
 		auto &build_vec = perfect_hash_table[i];
+		if (i == 1) {
+			uint32_t *sel = reinterpret_cast<uint32_t *>(build_vec.GetData());
+			for (int i = 0; i < result.size(); i++) {
+				std::cout << sel[i] << " ";
+			}
+		}
 		result_vector.Reference(build_vec);
 		result_vector.Slice(state.build_sel_vec, probe_sel_count);
 	}
@@ -253,6 +262,7 @@ void PerfectHashJoinExecutor::TemplatedFillSelectionVectorProbe(Vector &source, 
 				auto idx = (idx_t)(input_value - min_value); // subtract min value to get the idx position
 				                                             // check for matches in the build
 				if (bitmap_build_idx[idx]) {
+					std::cout << input_value << " " << idx << std::endl;
 					build_sel_vec.set_index(sel_idx, idx);
 					probe_sel_vec.set_index(sel_idx++, i);
 					probe_sel_count++;

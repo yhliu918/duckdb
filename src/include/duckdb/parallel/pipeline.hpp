@@ -13,6 +13,7 @@
 #include "duckdb/common/set.hpp"
 #include "duckdb/common/unordered_set.hpp"
 #include "duckdb/execution/physical_operator.hpp"
+#include "duckdb/execution/physical_operator_states.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/parallel/executor_task.hpp"
 #include "duckdb/parallel/task_scheduler.hpp"
@@ -120,36 +121,6 @@ public:
 
 	//! Updates the batch index of a pipeline (and returns the new minimum batch index)
 	idx_t UpdateBatchIndex(idx_t old_index, idx_t new_index);
-
-	struct MatSourceInfo {
-		MatSourceInfo() = default;
-		MatSourceInfo(shared_ptr<RowGroupCollection> table, optional_ptr<PhysicalOperator> op,
-		              unique_ptr<GlobalSourceState> state, unique_ptr<LocalSourceState> local_state) {
-			this->table = table;
-			this->materialize_source = op;
-			this->materialize_source_state = move(state);
-			this->materialize_local_source_state = move(local_state);
-		}
-		MatSourceInfo(MatSourceInfo &&info) noexcept {
-			this->table = std::move(info.table);
-			this->materialize_source = std::move(info.materialize_source);
-			this->materialize_source_state = std::move(info.materialize_source_state);
-			this->materialize_local_source_state = std::move(info.materialize_local_source_state);
-		}
-		MatSourceInfo &operator=(MatSourceInfo &&info) noexcept {
-			if (this != &info) {
-				this->table = std::move(info.table);
-				this->materialize_source = std::move(info.materialize_source);
-				this->materialize_source_state = std::move(info.materialize_source_state);
-				this->materialize_local_source_state = std::move(info.materialize_local_source_state);
-			}
-			return *this;
-		}
-		shared_ptr<RowGroupCollection> table;
-		optional_ptr<PhysicalOperator> materialize_source;
-		unique_ptr<GlobalSourceState> materialize_source_state;
-		unique_ptr<LocalSourceState> materialize_local_source_state;
-	};
 
 	void SetMaterializeSource(int pipe_id, shared_ptr<RowGroupCollection> table, optional_ptr<PhysicalOperator> op,
 	                          unique_ptr<GlobalSourceState> state, unique_ptr<LocalSourceState> local_state) {
