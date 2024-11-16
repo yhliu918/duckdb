@@ -21,6 +21,7 @@
 
 namespace duckdb {
 class Executor;
+#define CHUNK_QUEUE_THRESHOLD 2
 
 //! The result of executing a PipelineExecutor
 enum class PipelineExecuteResult {
@@ -70,6 +71,9 @@ public:
 
 	std::unordered_map<int, int> result_index;
 
+	std::vector<DataChunk *> chunk_queue; // queue of chunks to be processed(materialized)
+	int chunk_counter = 0;
+
 private:
 	//! The pipeline to process
 	Pipeline &pipeline;
@@ -80,6 +84,7 @@ private:
 
 	//! Intermediate chunks for the operators
 	vector<unique_ptr<DataChunk>> intermediate_chunks;
+	vector<unique_ptr<DataChunk>> final_chunks;
 	//! Intermediate states for the operators
 	vector<unique_ptr<OperatorState>> intermediate_states;
 
