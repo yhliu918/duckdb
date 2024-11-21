@@ -452,30 +452,28 @@ void PipelineExecutor::FlushQueuedChunks() {
 	int origin_output_count = last_op.GetTypes().size();
 
 	vector<LogicalType> types;
+	std::unordered_map<int, int> mat_col_write_idx;
 	for (auto &[rowid_col_idx, mat_map] : pipeline.materialize_maps) {
-		for (auto &[col_id, type] : mat_map.materialize_column_types) {
-			types.push_back(LogicalType(LogicalTypeId(type)));
+		for (auto &[col_idx, result_col_index] : mat_map.materialize_column_ids) {
+			types.push_back(chunk_queue[0]->data[result_col_index].GetType());
+			mat_col_write_idx[col_idx] = types.size() - 1;
 		}
 	}
-	// for (auto &[col_id, type] : pipeline.final_materialize_column_types) {
-	// 	types.push_back(LogicalType(LogicalTypeId(type)));
-	// }
 	DataChunk mat_chunk;
 	mat_chunk.Initialize(Allocator::DefaultAllocator(), types, result_index.begin()->second);
 	unordered_map<int, int> mat_result_write_back;
 	unordered_map<int, bool> colid_keep_rowid;
-	int write_col_idx = 0;
 	for (auto &[rowid_col_idx, mat_map] : pipeline.materialize_maps) {
 		colid_keep_rowid[rowid_col_idx] = mat_map.keep_rowid;
 		unordered_map<int64_t, int64_t> materialize_column_ids_new;
 		unordered_map<int64_t, int32_t> fixed_len_strings_columns_new;
 		for (auto &[col_idx, result_col_index] : mat_map.materialize_column_ids) {
+			int write_col_idx = mat_col_write_idx[col_idx];
 			materialize_column_ids_new[col_idx] = write_col_idx;
 			if (mat_map.fixed_len_strings_columns.find(result_col_index) != mat_map.fixed_len_strings_columns.end()) {
 				fixed_len_strings_columns_new[write_col_idx] = mat_map.fixed_len_strings_columns[result_col_index];
 			}
 			mat_result_write_back[result_col_index] = write_col_idx;
-			write_col_idx++;
 		}
 
 		auto &mat_source = pipeline.materialize_sources[mat_map.source_pipeline_id];
