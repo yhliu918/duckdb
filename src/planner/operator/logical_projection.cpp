@@ -16,6 +16,14 @@ void LogicalProjection::ResolveTypes() {
 	for (auto &expr : expressions) {
 		types.push_back(expr->return_type);
 	}
+	for (auto &[col, keep] : col_rowid_keep) {
+		if (!keep) {
+			types.erase(types.begin() + col);
+		}
+	}
+	for (auto &type : mat_type) {
+		types.push_back(LogicalType(LogicalTypeId(type)));
+	}
 }
 
 vector<idx_t> LogicalProjection::GetTableIndex() const {

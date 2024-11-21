@@ -14,8 +14,10 @@
 #include "duckdb/optimizer/filter_pullup.hpp"
 #include "duckdb/optimizer/filter_pushdown.hpp"
 #include "duckdb/optimizer/in_clause_rewriter.hpp"
+#include "duckdb/optimizer/join_filter_pushdown_optimizer.hpp"
 #include "duckdb/optimizer/join_order/join_order_optimizer.hpp"
 #include "duckdb/optimizer/limit_pushdown.hpp"
+#include "duckdb/optimizer/materialize_planner.hpp"
 #include "duckdb/optimizer/regex_range_filter.hpp"
 #include "duckdb/optimizer/remove_duplicate_groups.hpp"
 #include "duckdb/optimizer/remove_unused_columns.hpp"
@@ -26,12 +28,10 @@
 #include "duckdb/optimizer/statistics_propagator.hpp"
 #include "duckdb/optimizer/topn_optimizer.hpp"
 #include "duckdb/optimizer/unnest_rewriter.hpp"
-#include "duckdb/optimizer/join_filter_pushdown_optimizer.hpp"
 #include "duckdb/planner/binder.hpp"
 #include "duckdb/planner/planner.hpp"
 
 namespace duckdb {
-
 Optimizer::Optimizer(Binder &binder, ClientContext &context) : context(context), binder(binder), rewriter(context) {
 	rewriter.rules.push_back(make_uniq<ConstantFoldingRule>(rewriter));
 	rewriter.rules.push_back(make_uniq<DistributivityRule>(rewriter));
@@ -226,15 +226,21 @@ void Optimizer::RunBuiltInOptimizers() {
 		JoinFilterPushdownOptimizer join_filter_pushdown(*this);
 		join_filter_pushdown.VisitOperator(*plan);
 	});
+
+	// Modify into materialization plan
+	// MaterializePlanner materialize_planner(*this);
+	// materialize_planner.VisitOperator(*plan);
+	// plan->ResolveOperatorTypes();
 }
 
 unique_ptr<LogicalOperator> Optimizer::Optimize(unique_ptr<LogicalOperator> plan_p) {
 	Verify(*plan_p);
 
 	this->plan = std::move(plan_p);
+	std::cout << this->plan->ToString() << std::endl;
 
 	RunBuiltInOptimizers();
-
+	// we can add the materialize optimization here
 	for (auto &optimizer_extension : DBConfig::GetConfig(context).optimizer_extensions) {
 		RunOptimizer(OptimizerType::EXTENSION, [&]() {
 			OptimizerExtensionInput input {GetContext(), *this, optimizer_extension.optimizer_info.get()};

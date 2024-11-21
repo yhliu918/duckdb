@@ -14,11 +14,30 @@ PhysicalTableScan::PhysicalTableScan(vector<LogicalType> types, TableFunction fu
                                      vector<column_t> column_ids_p, vector<idx_t> projection_ids_p,
                                      vector<string> names_p, unique_ptr<TableFilterSet> table_filters_p,
                                      idx_t estimated_cardinality, ExtraOperatorInfo extra_info,
-                                     vector<Value> parameters_p)
+                                     vector<Value> parameters_p, vector<int> disable_columns,
+                                     vector<idx_t> projection_columns)
     : PhysicalOperator(PhysicalOperatorType::TABLE_SCAN, std::move(types), estimated_cardinality),
       function(std::move(function_p)), bind_data(std::move(bind_data_p)), returned_types(std::move(returned_types_p)),
-      column_ids(std::move(column_ids_p)), projection_ids(std::move(projection_ids_p)), names(std::move(names_p)),
-      table_filters(std::move(table_filters_p)), extra_info(extra_info), parameters(std::move(parameters_p)) {
+      column_ids_total(std::move(column_ids_p)), projection_ids_total(std::move(projection_ids_p)),
+      names(std::move(names_p)), table_filters(std::move(table_filters_p)), extra_info(extra_info),
+      parameters(std::move(parameters_p)) {
+	this->disable_columns = std::move(disable_columns);
+	for (int i = 0; i < column_ids_total.size(); i++) {
+		if (this->disable_columns[i] == 0) {
+			this->column_ids.push_back(column_ids_total[i]);
+		}
+	}
+	if (projection_columns.size() > 0) {
+		for (int i = 0; i < projection_columns.size(); i++) {
+			this->projection_ids.push_back(projection_columns[i]);
+		}
+	} else {
+		this->projection_ids = this->projection_ids_total;
+	}
+	for (auto &project_col : this->projection_ids_total) {
+		this->output_disable_columns.push_back(this->disable_columns[project_col]);
+	}
+	this->disable_columns = this->output_disable_columns;
 }
 
 class TableScanGlobalSourceState : public GlobalSourceState {

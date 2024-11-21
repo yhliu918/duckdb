@@ -74,8 +74,7 @@ public:
 
 	void InitializeAppend(vector<LogicalType> &type);
 	//! Append a DataChunk to this ColumnDataCollection using the specified append state
-	DUCKDB_API void Append(ColumnDataAppendState &state, DataChunk &new_chunk, int fill_column_count = -1,
-	                       unordered_map<int, int> *column_map = nullptr);
+	DUCKDB_API void Append(ColumnDataAppendState &state, DataChunk &new_chunk);
 
 	void AppendMaterialize(ColumnDataAppendState &state, DataChunk &new_chunk, int append_column_count);
 	void AppendMaterialzeNew(ColumnDataAppendState &state, DataChunk &input, int fill_column_count);

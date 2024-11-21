@@ -534,21 +534,28 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 		bool has_filters = filter_info.HasFilters();
 		if (count == max_count && !has_filters) {
 			// scan all vectors completely: full scan without deletions or table filters
+			int idx = 0;
 			for (idx_t i = 0; i < column_ids.size(); i++) {
 				const auto &column = column_ids[i];
+				if (result.disable_columns[idx] == 1) {
+					idx++;
+					i--;
+					continue;
+				}
 				if (column == COLUMN_IDENTIFIER_ROW_ID) {
 					// scan row id
-					D_ASSERT(result.data[i].GetType().InternalType() == ROW_TYPE);
-					result.data[i].Sequence(UnsafeNumericCast<int64_t>(this->start + current_row), 1, count);
+					D_ASSERT(result.data[idx].GetType().InternalType() == ROW_TYPE);
+					result.data[idx].Sequence(UnsafeNumericCast<int64_t>(this->start + current_row), 1, count);
 				} else {
 					auto &col_data = GetColumn(column);
 					if (TYPE != TableScanType::TABLE_SCAN_REGULAR) {
-						col_data.ScanCommitted(state.vector_index, state.column_scans[i], result.data[i],
+						col_data.ScanCommitted(state.vector_index, state.column_scans[i], result.data[idx],
 						                       ALLOW_UPDATES);
 					} else {
-						col_data.Scan(transaction, state.vector_index, state.column_scans[i], result.data[i]);
+						col_data.Scan(transaction, state.vector_index, state.column_scans[i], result.data[idx]);
 					}
 				}
+				idx++;
 			}
 		} else {
 			// partial scan: we have deletions or table filters
@@ -605,16 +612,23 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 				continue;
 			}
 			//! Now we use the selection vector to fetch data for the other columns.
+			int idx = 0;
 			for (idx_t i = 0; i < column_ids.size(); i++) {
 				if (has_filters && filter_info.ColumnHasFilters(i)) {
 					// column has already been scanned as part of the filtering process
+					idx++;
+					continue;
+				}
+				if (result.disable_columns[idx] == 1) {
+					idx++;
+					i--;
 					continue;
 				}
 				auto column = column_ids[i];
 				if (column == COLUMN_IDENTIFIER_ROW_ID) {
-					D_ASSERT(result.data[i].GetType().InternalType() == PhysicalType::INT64);
-					result.data[i].SetVectorType(VectorType::FLAT_VECTOR);
-					auto result_data = FlatVector::GetData<int64_t>(result.data[i]);
+					D_ASSERT(result.data[idx].GetType().InternalType() == PhysicalType::INT64);
+					result.data[idx].SetVectorType(VectorType::FLAT_VECTOR);
+					auto result_data = FlatVector::GetData<int64_t>(result.data[idx]);
 					for (size_t sel_idx = 0; sel_idx < approved_tuple_count; sel_idx++) {
 						result_data[sel_idx] =
 						    UnsafeNumericCast<int64_t>(this->start + current_row + sel.get_index(sel_idx));
@@ -622,13 +636,14 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 				} else {
 					auto &col_data = GetColumn(column);
 					if (TYPE == TableScanType::TABLE_SCAN_REGULAR) {
-						col_data.FilterScan(transaction, state.vector_index, state.column_scans[i], result.data[i], sel,
-						                    approved_tuple_count);
+						col_data.FilterScan(transaction, state.vector_index, state.column_scans[i], result.data[idx],
+						                    sel, approved_tuple_count);
 					} else {
-						col_data.FilterScanCommitted(state.vector_index, state.column_scans[i], result.data[i], sel,
+						col_data.FilterScanCommitted(state.vector_index, state.column_scans[i], result.data[idx], sel,
 						                             approved_tuple_count, ALLOW_UPDATES);
 					}
 				}
+				idx++;
 			}
 			filter_info.EndFilter(filter_state);
 

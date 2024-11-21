@@ -11,9 +11,9 @@
 #include "duckdb/common/constants.hpp"
 #include "duckdb/common/enums/joinref_type.hpp"
 #include "duckdb/common/unordered_set.hpp"
+#include "duckdb/execution/operator/join/join_filter_pushdown.hpp"
 #include "duckdb/planner/joinside.hpp"
 #include "duckdb/planner/operator/logical_join.hpp"
-#include "duckdb/execution/operator/join/join_filter_pushdown.hpp"
 
 namespace duckdb {
 

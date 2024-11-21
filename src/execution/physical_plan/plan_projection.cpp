@@ -1,7 +1,7 @@
 #include "duckdb/execution/operator/projection/physical_projection.hpp"
 #include "duckdb/execution/physical_plan_generator.hpp"
-#include "duckdb/planner/operator/logical_projection.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
+#include "duckdb/planner/operator/logical_projection.hpp"
 
 namespace duckdb {
 
@@ -35,9 +35,18 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalProjection
 			return plan;
 		}
 	}
-
+	vector<int> disable_column;
 	auto projection = make_uniq<PhysicalProjection>(op.types, std::move(op.expressions), op.estimated_cardinality);
+	for (auto &expr : projection->select_list) {
+		if (expr->type == ExpressionType::BOUND_REF) {
+			auto &bound_ref = (BoundReferenceExpression &)*expr;
+			disable_column.push_back(plan->disable_columns[bound_ref.index]);
+		}
+	}
+	projection->disable_columns = std::move(disable_column);
+	projection->output_disable_columns = plan->disable_columns;
 	projection->children.push_back(std::move(plan));
+
 	return std::move(projection);
 }
 

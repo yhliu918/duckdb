@@ -112,6 +112,9 @@ public:
 	//! Used in perfect hash join
 	PerfectHashJoinStats perfect_join_statistics;
 
+	vector<int8_t> total_mat_col_types;
+	unordered_map<int, bool> rowid_col_keep;
+
 public:
 	InsertionOrderPreservingMap<string> ParamsToString() const override;
 

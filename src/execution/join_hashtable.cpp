@@ -30,7 +30,8 @@ JoinHashTable::InsertState::InsertState(const JoinHashTable &ht)
 }
 
 JoinHashTable::JoinHashTable(ClientContext &context, const vector<JoinCondition> &conditions_p,
-                             vector<LogicalType> btypes, JoinType type_p, const vector<idx_t> &output_columns_p)
+                             vector<LogicalType> btypes, JoinType type_p, const vector<idx_t> &output_columns_p,
+                             const unordered_map<int, bool> &rowid_col_keep, const vector<int8_t> &total_mat_col_types)
     : buffer_manager(BufferManager::GetBufferManager(context)), conditions(conditions_p),
       build_types(std::move(btypes)), output_columns(output_columns_p), entry_size(0), tuple_size(0),
       vfound(Value::BOOLEAN(false)), join_type(type_p), finalized(false), has_null(false),
@@ -66,6 +67,14 @@ JoinHashTable::JoinHashTable(ClientContext &context, const vector<JoinCondition>
 	// Types for the layout
 	vector<LogicalType> layout_types(condition_types);
 	layout_types.insert(layout_types.end(), build_types.begin(), build_types.end());
+	for (auto &[col_id, keep_rowid] : rowid_col_keep) {
+		if (!keep_rowid) {
+			layout_types.erase(layout_types.begin() + col_id);
+		}
+	}
+	for (auto &type : total_mat_col_types) {
+		layout_types.push_back(LogicalType(LogicalTypeId(type)));
+	}
 	if (PropagatesBuildSide(join_type)) {
 		// full/right outer joins need an extra bool to keep track of whether or not a tuple has found a matching entry
 		// we place the bool before the NEXT pointer
@@ -364,11 +373,15 @@ void JoinHashTable::Build(PartitionedTupleDataAppendState &append_state, DataChu
 
 	// build a chunk to append to the data collection [keys, payload, (optional "found" boolean), hash]
 	DataChunk source_chunk;
-	source_chunk.InitializeEmpty(layout.GetTypes());
+	vector<LogicalType> layout_types(layout.GetTypes());
+	idx_t col_offset = keys.ColumnCount();
+	for (idx_t i = 0; i < payload.ColumnCount(); i++) {
+		layout_types[i + col_offset] = payload.data[i].GetType();
+	}
+	source_chunk.InitializeEmpty(layout_types);
 	for (idx_t i = 0; i < keys.ColumnCount(); i++) {
 		source_chunk.data[i].Reference(keys.data[i]);
 	}
-	idx_t col_offset = keys.ColumnCount();
 	D_ASSERT(build_types.size() == payload.ColumnCount());
 	for (idx_t i = 0; i < payload.ColumnCount(); i++) {
 		source_chunk.data[col_offset + i].Reference(payload.data[i]);
@@ -898,9 +911,9 @@ void ScanStructure::GatherResult(Vector &result, const SelectionVector &sel_vect
 }
 
 void ScanStructure::NextInnerJoin(DataChunk &keys, DataChunk &left, DataChunk &result) {
-	if (ht.join_type != JoinType::RIGHT_SEMI && ht.join_type != JoinType::RIGHT_ANTI) {
-		D_ASSERT(result.ColumnCount() == left.ColumnCount() + ht.output_columns.size());
-	}
+	// if (ht.join_type != JoinType::RIGHT_SEMI && ht.join_type != JoinType::RIGHT_ANTI) {
+	// 	D_ASSERT(result.ColumnCount() == left.ColumnCount() + ht.output_columns.size());
+	// }
 	if (this->count == 0) {
 		// no pointers left to chase
 		return;
@@ -926,13 +939,26 @@ void ScanStructure::NextInnerJoin(DataChunk &keys, DataChunk &left, DataChunk &r
 			// construct the result
 			// on the LHS, we create a slice using the result vector
 			result.Slice(left, chain_match_sel_vector, result_count);
-
+			int idx = 0;
 			// on the RHS, we need to fetch the data from the hash table
 			for (idx_t i = 0; i < ht.output_columns.size(); i++) {
-				auto &vector = result.data[left.ColumnCount() + i];
+				auto &vector = result.data[left.ColumnCount() + idx];
+				if (result.disable_columns[left.ColumnCount() + idx] == 1) {
+					idx++;
+					i--;
+					continue;
+				}
 				const auto output_col_idx = ht.output_columns[i];
+				// std::cout << output_col_idx << std::endl;
+				// std::cout << vector.GetType().ToString() << std::endl;
+				// std::cout << ht.layout.GetTypes()[output_col_idx].ToString() << std::endl;
+				// if (vector.GetType() != ht.layout.GetTypes()[output_col_idx]) {
+				// 	std::cout << "Mismatched types" << std::endl;
+				// }
+
 				D_ASSERT(vector.GetType() == ht.layout.GetTypes()[output_col_idx]);
 				GatherResult(vector, chain_match_sel_vector, result_count, output_col_idx);
+				idx++;
 			}
 		}
 		AdvancePointers();

@@ -22,6 +22,7 @@ add_library_unity(
   filter_combiner.cpp
   filter_pullup.cpp
   filter_pushdown.cpp
+  materialize_planner.cpp
   in_clause_rewriter.cpp
   join_filter_pushdown_optimizer.cpp
   optimizer.cpp

@@ -8,11 +8,11 @@
 
 #pragma once
 
+#include "duckdb/common/extra_operator_info.hpp"
 #include "duckdb/execution/physical_operator.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/planner/table_filter.hpp"
 #include "duckdb/storage/data_table.hpp"
-#include "duckdb/common/extra_operator_info.hpp"
 
 namespace duckdb {
 
@@ -26,7 +26,8 @@ public:
 	PhysicalTableScan(vector<LogicalType> types, TableFunction function, unique_ptr<FunctionData> bind_data,
 	                  vector<LogicalType> returned_types, vector<column_t> column_ids, vector<idx_t> projection_ids,
 	                  vector<string> names, unique_ptr<TableFilterSet> table_filters, idx_t estimated_cardinality,
-	                  ExtraOperatorInfo extra_info, vector<Value> parameters);
+	                  ExtraOperatorInfo extra_info, vector<Value> parameters, vector<int> disable_columns = {},
+	                  vector<idx_t> projection_columns = {});
 
 	//! The table function
 	TableFunction function;
@@ -36,8 +37,12 @@ public:
 	vector<LogicalType> returned_types;
 	//! The column ids used within the table function
 	vector<column_t> column_ids;
+
+	vector<column_t> column_ids_total;
 	//! The projected-out column ids
 	vector<idx_t> projection_ids;
+
+	vector<idx_t> projection_ids_total;
 	//! The names of the columns
 	vector<string> names;
 	//! The table filters

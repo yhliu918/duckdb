@@ -54,6 +54,7 @@ void DataChunk::Initialize(Allocator &allocator, vector<LogicalType>::const_iter
 		VectorCache cache(allocator, *begin, capacity);
 		data.emplace_back(cache);
 		vector_caches.push_back(std::move(cache));
+		disable_columns.push_back(0);
 	}
 }
 
@@ -68,6 +69,7 @@ void DataChunk::InitializeEmpty(vector<LogicalType>::const_iterator begin, vecto
 	D_ASSERT(std::distance(begin, end) != 0); // empty chunk not allowed
 	for (; begin != end; begin++) {
 		data.emplace_back(*begin, nullptr);
+		disable_columns.push_back(0);
 	}
 }
 
@@ -116,6 +118,7 @@ void DataChunk::Reference(DataChunk &chunk) {
 	SetCardinality(chunk);
 	for (idx_t i = 0; i < chunk.ColumnCount(); i++) {
 		data[i].Reference(chunk.data[i]);
+		disable_columns[i] = chunk.disable_columns[i];
 	}
 }
 
@@ -124,7 +127,7 @@ void DataChunk::Move(DataChunk &chunk) {
 	SetCapacity(chunk);
 	data = std::move(chunk.data);
 	vector_caches = std::move(chunk.vector_caches);
-
+	disable_columns = std::move(chunk.disable_columns);
 	chunk.Destroy();
 }
 
@@ -179,14 +182,26 @@ void DataChunk::Fuse(DataChunk &other) {
 }
 
 void DataChunk::ReferenceColumns(DataChunk &other, const vector<column_t> &column_ids) {
-	D_ASSERT(ColumnCount() == column_ids.size());
+	// D_ASSERT(ColumnCount() == column_ids.size());
 	Reset();
-	for (idx_t col_idx = 0; col_idx < ColumnCount(); col_idx++) {
+	int idx = 0;
+	for (idx_t col_idx = 0; col_idx < column_ids.size(); col_idx++) {
+		// if (std::find(column_ids.begin(), column_ids.end(), col_idx) == column_ids.end()) {
+		// 	this->disable_columns[col_idx] = 1;
+		// 	continue;
+		// }
 		auto &other_col = other.data[column_ids[col_idx]];
-		auto &this_col = data[col_idx];
+		auto &this_col = data[idx];
+		if (disable_columns[idx] == 1) {
+			idx++;
+			col_idx--;
+			continue;
+		}
 		D_ASSERT(other_col.GetType() == this_col.GetType());
 		this_col.Reference(other_col);
+		idx++;
 	}
+
 	SetCardinality(other.size());
 }
 
@@ -210,6 +225,9 @@ void DataChunk::Append(const DataChunk &other, bool resize, SelectionVector *sel
 		}
 	}
 	for (idx_t i = 0; i < ColumnCount(); i++) {
+		if (other.disable_columns[i] == 1) {
+			continue;
+		}
 		D_ASSERT(data[i].GetVectorType() == VectorType::FLAT_VECTOR);
 		if (sel) {
 			VectorOperations::Copy(other.data[i], data[i], *sel, sel_count, 0, size());

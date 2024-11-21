@@ -156,9 +156,9 @@ public:
 		DataChunk lhs_data;
 		TupleDataChunkState chunk_state;
 	};
-
 	JoinHashTable(ClientContext &context, const vector<JoinCondition> &conditions, vector<LogicalType> build_types,
-	              JoinType type, const vector<idx_t> &output_columns);
+	              JoinType type, const vector<idx_t> &output_columns,
+	              const unordered_map<int, bool> &rowid_col_keep = {}, const vector<int8_t> &total_mat_col_types = {});
 	~JoinHashTable();
 
 	//! Add the given data to the HT

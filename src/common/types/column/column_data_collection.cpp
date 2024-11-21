@@ -892,24 +892,16 @@ void ColumnDataCollection::AppendMaterialzeNew(ColumnDataAppendState &state, Dat
 	segment.count += input.size();
 	count += input.size();
 }
-
-void ColumnDataCollection::Append(ColumnDataAppendState &state, DataChunk &input, int fill_column_count,
-                                  unordered_map<int, int> *column_map) {
-	if (fill_column_count == -1) {
-		fill_column_count = types.size();
-	}
-	if (fill_column_count == 0) {
-		return;
-	}
+void ColumnDataCollection::Append(ColumnDataAppendState &state, DataChunk &input) {
 	D_ASSERT(!finished_append);
-	// D_ASSERT(types == input.GetTypes());
+	D_ASSERT(types == input.GetTypes());
 
 	auto &segment = *segments.back();
-	for (auto [input_idx, column_idx] : *column_map) {
-		if (IsComplexType(input.data[input_idx].GetType())) {
-			input.data[input_idx].Flatten(input.size());
+	for (idx_t vector_idx = 0; vector_idx < types.size(); vector_idx++) {
+		if (IsComplexType(input.data[vector_idx].GetType())) {
+			input.data[vector_idx].Flatten(input.size());
 		}
-		input.data[input_idx].ToUnifiedFormat(input.size(), state.vector_data[column_idx]);
+		input.data[vector_idx].ToUnifiedFormat(input.size(), state.vector_data[vector_idx]);
 	}
 
 	idx_t remaining = input.size();
@@ -918,11 +910,11 @@ void ColumnDataCollection::Append(ColumnDataAppendState &state, DataChunk &input
 		idx_t append_amount = MinValue<idx_t>(remaining, STANDARD_VECTOR_SIZE - chunk_data.count);
 		if (append_amount > 0) {
 			idx_t offset = input.size() - remaining;
-			for (auto [input_idx, column_idx] : *column_map) {
-				ColumnDataMetaData meta_data(copy_functions[input_idx], segment, state, chunk_data,
-				                             chunk_data.vector_data[column_idx]);
-				copy_functions[input_idx].function(meta_data, state.vector_data[column_idx], input.data[input_idx],
-				                                   offset, append_amount);
+			for (idx_t vector_idx = 0; vector_idx < types.size(); vector_idx++) {
+				ColumnDataMetaData meta_data(copy_functions[vector_idx], segment, state, chunk_data,
+				                             chunk_data.vector_data[vector_idx]);
+				copy_functions[vector_idx].function(meta_data, state.vector_data[vector_idx], input.data[vector_idx],
+				                                    offset, append_amount);
 			}
 			chunk_data.count += append_amount;
 		}
@@ -937,6 +929,51 @@ void ColumnDataCollection::Append(ColumnDataAppendState &state, DataChunk &input
 	segment.count += input.size();
 	count += input.size();
 }
+
+// void ColumnDataCollection::Append(ColumnDataAppendState &state, DataChunk &input, int fill_column_count,
+//                                   unordered_map<int, int> *column_map) {
+// 	if (fill_column_count == -1) {
+// 		fill_column_count = types.size();
+// 	}
+// 	if (fill_column_count == 0) {
+// 		return;
+// 	}
+// 	D_ASSERT(!finished_append);
+// 	// D_ASSERT(types == input.GetTypes());
+
+// 	auto &segment = *segments.back();
+// 	for (auto [input_idx, column_idx] : *column_map) {
+// 		if (IsComplexType(input.data[input_idx].GetType())) {
+// 			input.data[input_idx].Flatten(input.size());
+// 		}
+// 		input.data[input_idx].ToUnifiedFormat(input.size(), state.vector_data[column_idx]);
+// 	}
+
+// 	idx_t remaining = input.size();
+// 	while (remaining > 0) {
+// 		auto &chunk_data = segment.chunk_data.back();
+// 		idx_t append_amount = MinValue<idx_t>(remaining, STANDARD_VECTOR_SIZE - chunk_data.count);
+// 		if (append_amount > 0) {
+// 			idx_t offset = input.size() - remaining;
+// 			for (auto [input_idx, column_idx] : *column_map) {
+// 				ColumnDataMetaData meta_data(copy_functions[input_idx], segment, state, chunk_data,
+// 				                             chunk_data.vector_data[column_idx]);
+// 				copy_functions[input_idx].function(meta_data, state.vector_data[column_idx], input.data[input_idx],
+// 				                                   offset, append_amount);
+// 			}
+// 			chunk_data.count += append_amount;
+// 		}
+// 		remaining -= append_amount;
+// 		if (remaining > 0) {
+// 			// more to do
+// 			// allocate a new chunk
+// 			segment.AllocateNewChunk();
+// 			segment.InitializeChunkState(segment.chunk_data.size() - 1, state.current_chunk_state);
+// 		}
+// 	}
+// 	segment.count += input.size();
+// 	count += input.size();
+// }
 
 void ColumnDataCollection::Append(DataChunk &input) {
 	ColumnDataAppendState state;

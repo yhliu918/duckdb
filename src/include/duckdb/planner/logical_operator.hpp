@@ -9,14 +9,14 @@
 #pragma once
 
 #include "duckdb/catalog/catalog.hpp"
+#include "duckdb/common/case_insensitive_map.hpp"
 #include "duckdb/common/common.hpp"
-#include "duckdb/common/enums/logical_operator_type.hpp"
 #include "duckdb/common/enums/explain_format.hpp"
+#include "duckdb/common/enums/logical_operator_type.hpp"
+#include "duckdb/common/insertion_order_preserving_map.hpp"
 #include "duckdb/planner/column_binding.hpp"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/logical_operator_visitor.hpp"
-#include "duckdb/common/case_insensitive_map.hpp"
-#include "duckdb/common/insertion_order_preserving_map.hpp"
 
 #include <algorithm>
 #include <functional>
@@ -42,6 +42,9 @@ public:
 	//! Estimated Cardinality
 	idx_t estimated_cardinality;
 	bool has_estimated_cardinality;
+
+	std::unordered_map<int, bool> col_rowid_keep;
+	std::vector<int8_t> mat_type;
 
 public:
 	virtual vector<ColumnBinding> GetColumnBindings();

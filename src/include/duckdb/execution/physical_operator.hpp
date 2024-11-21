@@ -9,18 +9,19 @@
 #pragma once
 
 #include "duckdb/catalog/catalog.hpp"
+#include "duckdb/common/case_insensitive_map.hpp"
 #include "duckdb/common/common.hpp"
-#include "duckdb/common/enums/operator_result_type.hpp"
-#include "duckdb/common/enums/physical_operator_type.hpp"
 #include "duckdb/common/enums/explain_format.hpp"
+#include "duckdb/common/enums/operator_result_type.hpp"
+#include "duckdb/common/enums/order_preservation_type.hpp"
+#include "duckdb/common/enums/physical_operator_type.hpp"
+#include "duckdb/common/optional_idx.hpp"
 #include "duckdb/common/types/data_chunk.hpp"
 #include "duckdb/execution/execution_context.hpp"
-#include "duckdb/optimizer/join_order/join_node.hpp"
-#include "duckdb/common/optional_idx.hpp"
 #include "duckdb/execution/physical_operator_states.hpp"
-#include "duckdb/common/enums/order_preservation_type.hpp"
-#include "duckdb/common/case_insensitive_map.hpp"
+#include "duckdb/optimizer/join_order/join_node.hpp"
 
+#include <iostream>
 namespace duckdb {
 class Event;
 class Executor;
@@ -38,6 +39,8 @@ public:
 public:
 	PhysicalOperator(PhysicalOperatorType type, vector<LogicalType> types, idx_t estimated_cardinality)
 	    : type(type), types(std::move(types)), estimated_cardinality(estimated_cardinality) {
+		disable_columns = {};
+		output_disable_columns = {};
 	}
 
 	virtual ~PhysicalOperator() {
@@ -58,6 +61,9 @@ public:
 	unique_ptr<GlobalOperatorState> op_state;
 	//! Lock for (re)setting any of the operator states
 	mutex lock;
+	std::vector<int> disable_columns;
+	std::vector<int> output_disable_columns;
+	int operator_index = 0;
 
 public:
 	virtual string GetName() const;

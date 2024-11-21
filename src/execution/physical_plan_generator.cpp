@@ -3,14 +3,19 @@
 #include "duckdb/catalog/catalog_entry/scalar_function_catalog_entry.hpp"
 #include "duckdb/common/types/column/column_data_collection.hpp"
 #include "duckdb/execution/column_binding_resolver.hpp"
+#include "duckdb/execution/operator/helper/physical_verify_vector.hpp"
+#include "duckdb/execution/operator/join/physical_hash_join.hpp"
+#include "duckdb/execution/operator/projection/physical_projection.hpp"
+#include "duckdb/execution/operator/scan/physical_table_scan.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/config.hpp"
 #include "duckdb/main/query_profiler.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
-#include "duckdb/planner/operator/logical_extension_operator.hpp"
 #include "duckdb/planner/operator/list.hpp"
-#include "duckdb/execution/operator/helper/physical_verify_vector.hpp"
+#include "duckdb/planner/operator/logical_extension_operator.hpp"
 
+#include <assert.h>
+#include <fstream>
 namespace duckdb {
 
 class DependencyExtractor : public LogicalOperatorVisitor {
@@ -227,6 +232,33 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalOperator &
 		throw NotImplementedException("Unimplemented logical operator type!");
 	}
 	}
+	plan->operator_index = operator_idx;
+	operator_idx++;
+	std::ifstream infile;
+	infile.open("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/op_mat_" +
+	                std::to_string(plan->operator_index),
+	            std::ios::in);
+	if (infile.is_open()) {
+		int mat_col = 0;
+		while (infile >> mat_col) {
+			assert(plan->output_disable_columns[mat_col] != 0);
+			plan->output_disable_columns[mat_col] = 0;
+		}
+	}
+
+	std::string op_str = PrintOperator(plan);
+	std::cout << op_str << std::endl;
+	auto res_types = PrintOperatorCatalog(plan);
+	for (auto &res_type : res_types) {
+		std::cout << res_type << std::endl;
+	}
+	// std::ofstream myfile;
+	// myfile.open("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/op" +
+	//                 std::to_string(plan->operator_index),
+	//             std::ios::out);
+	// for (int i = 0; i < plan->disable_columns.size(); i++) {
+	// 	myfile << plan->disable_columns[i] << std::endl;
+	// }
 	if (!plan) {
 		throw InternalException("Physical plan generator - no plan generated");
 	}
@@ -238,6 +270,126 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalOperator &
 #endif
 
 	return plan;
+}
+
+std::string PhysicalPlanGenerator::PrintOperator(const unique_ptr<PhysicalOperator> &plan) {
+	std::string op_str = std::to_string(plan->operator_index) + " " + plan->GetName() + "\n";
+	switch (plan->type) {
+	case PhysicalOperatorType::PROJECTION: {
+		int i = 0;
+		for (auto &type : plan->types) {
+			op_str += "(" + std::to_string(i) + ", " + type.ToString() + ", " +
+			          std::to_string(plan->disable_columns[i]) + ")\n";
+			i++;
+		}
+		break;
+	}
+	case PhysicalOperatorType::TABLE_SCAN: {
+		int i = 0;
+		for (auto &type : plan->types) {
+			op_str += "(" + std::to_string(i) + ", " + type.ToString() + ", " +
+			          std::to_string(plan->disable_columns[i]) + ")\n";
+			i++;
+		}
+		break;
+	}
+	case PhysicalOperatorType::HASH_JOIN: {
+
+		int i = 0;
+		for (auto &type : plan->types) {
+			op_str += "(" + std::to_string(i) + ", " + type.ToString() + ", " +
+			          std::to_string(plan->disable_columns[i]) + ")\n";
+			i++;
+		}
+		for (int i = 0; i < plan->types.size(); i++) {
+			if (i < plan->children[0]->types.size()) {
+				op_str += "(" + std::to_string(i) + ", 0" + ")\n";
+			} else {
+				op_str += "(" + std::to_string(i) + ", 1" + ")\n";
+			}
+		}
+		break;
+	}
+	default:
+		break;
+	}
+	return op_str;
+}
+
+std::vector<std::string> PhysicalPlanGenerator::PrintOperatorCatalog(const unique_ptr<PhysicalOperator> &plan) {
+	std::vector<std::string> op_str;
+	switch (plan->type) {
+	case PhysicalOperatorType::PROJECTION: {
+		auto &projection = plan->Cast<PhysicalProjection>();
+		std::vector<std::string> op_str_child = PrintOperatorCatalog(projection.children[0]);
+		for (auto &expr : projection.select_list) {
+			if (expr->type == ExpressionType::BOUND_REF) {
+				auto &bound_ref = (BoundReferenceExpression &)*expr;
+				op_str.push_back(op_str_child[bound_ref.index]);
+			}
+		}
+		break;
+	}
+	case PhysicalOperatorType::TABLE_SCAN: {
+		auto &table_scan = plan->Cast<PhysicalTableScan>();
+		bool has_disabled = false;
+		for (int i = 0; i < table_scan.output_disable_columns.size(); i++) {
+			if (table_scan.output_disable_columns[i] == 1) {
+				has_disabled = true;
+				break;
+			}
+		}
+		if (!has_disabled) {
+			for (int i = 0; i < table_scan.projection_ids.size(); i++) {
+				op_str.push_back(table_scan.names[table_scan.column_ids_total[table_scan.projection_ids[i]]]);
+			}
+			break;
+		}
+		//! include disabled columns, return all columns
+		for (int i = 0; i < table_scan.projection_ids_total.size(); i++) {
+			op_str.push_back(table_scan.names[table_scan.column_ids_total[table_scan.projection_ids_total[i]]]);
+		}
+		break;
+	}
+	case PhysicalOperatorType::HASH_JOIN: {
+		auto &hash_join = plan->Cast<PhysicalHashJoin>();
+		std::vector<std::string> op_str_child_left = PrintOperatorCatalog(hash_join.children[0]);
+		std::vector<std::string> op_str_child_right = PrintOperatorCatalog(hash_join.children[1]);
+		// join keys
+		op_str = op_str_child_left;
+		// right join keys
+		vector<int> right_join_keys;
+		for (int i = 0; i < hash_join.condition_types.size(); i++) {
+			int right_idx = hash_join.conditions[i].right->Cast<BoundReferenceExpression>().index;
+			right_join_keys.push_back(right_idx);
+			op_str.push_back(op_str_child_right[right_idx]);
+		}
+		// payload columns
+		// if right child has disabled columns, return all columns
+		bool right_has_disabled = false;
+		for (int i = 0; i < hash_join.children[1]->output_disable_columns.size(); i++) {
+			if (hash_join.children[1]->output_disable_columns[i] == 1) {
+				right_has_disabled = true;
+				break;
+			}
+		}
+		if (right_has_disabled) {
+			for (int i = 0; i < op_str_child_right.size(); i++) {
+				if (right_join_keys.end() == std::find(right_join_keys.begin(), right_join_keys.end(), i)) {
+					op_str.push_back(op_str_child_right[i]);
+				}
+			}
+		} else {
+			for (int i = 0; i < hash_join.payload_column_idxs.size(); i++) {
+				op_str.push_back(op_str_child_right[hash_join.payload_column_idxs[i]]);
+			}
+		}
+		break;
+	}
+	default:
+		break;
+	}
+	return op_str;
 }
 
 } // namespace duckdb

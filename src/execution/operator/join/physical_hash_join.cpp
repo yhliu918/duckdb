@@ -63,9 +63,20 @@ PhysicalHashJoin::PhysicalHashJoin(LogicalOperator &op, unique_ptr<PhysicalOpera
 			right_projection_map_copy.emplace_back(i);
 		}
 	}
+	for (int i = 0; i < children[0]->types.size(); i++) {
+		if (children[0]->output_disable_columns.size() && children[0]->output_disable_columns[i]) {
+			this->disable_columns.push_back(1);
+		} else {
+			this->disable_columns.push_back(0);
+		}
+	}
 
 	// Now fill payload expressions/types and RHS columns/types
 	for (auto &rhs_col : right_projection_map_copy) {
+		if (children[1]->output_disable_columns.size() && children[1]->output_disable_columns[rhs_col]) {
+			this->disable_columns.push_back(1);
+			continue;
+		}
 		auto &rhs_col_type = rhs_input_types[rhs_col];
 
 		auto it = build_columns_in_conditions.find(rhs_col);
@@ -79,7 +90,9 @@ PhysicalHashJoin::PhysicalHashJoin(LogicalOperator &op, unique_ptr<PhysicalOpera
 			rhs_output_columns.push_back(it->second);
 		}
 		rhs_output_types.push_back(rhs_col_type);
+		this->disable_columns.push_back(0);
 	}
+	this->output_disable_columns = this->disable_columns;
 }
 
 PhysicalHashJoin::PhysicalHashJoin(LogicalOperator &op, unique_ptr<PhysicalOperator> left,
@@ -152,6 +165,10 @@ public:
 	unique_ptr<JoinHashTable> hash_table;
 
 	unique_ptr<JoinFilterLocalState> local_filter_state;
+	bool set_output = false;
+	vector<idx_t> payload_column_idxs_new;
+	DataChunk payload_chunk_new;
+	vector<LogicalType> payload_types_new;
 };
 
 HashJoinGlobalSinkState::HashJoinGlobalSinkState(const PhysicalHashJoin &op_p, ClientContext &context_p)
@@ -177,7 +194,8 @@ HashJoinGlobalSinkState::HashJoinGlobalSinkState(const PhysicalHashJoin &op_p, C
 }
 
 unique_ptr<JoinHashTable> PhysicalHashJoin::InitializeHashTable(ClientContext &context) const {
-	auto result = make_uniq<JoinHashTable>(context, conditions, payload_types, join_type, rhs_output_columns);
+	auto result = make_uniq<JoinHashTable>(context, conditions, payload_types, join_type, rhs_output_columns,
+	                                       rowid_col_keep, total_mat_col_types);
 	if (!delim_types.empty() && join_type == JoinType::MARK) {
 		// correlated MARK join
 		if (delim_types.size() + 1 == conditions.size()) {
@@ -248,7 +266,23 @@ void JoinFilterPushdownInfo::Sink(DataChunk &chunk, JoinFilterLocalState &lstate
 
 SinkResultType PhysicalHashJoin::Sink(ExecutionContext &context, DataChunk &chunk, OperatorSinkInput &input) const {
 	auto &lstate = input.local_state.Cast<HashJoinLocalSinkState>();
+	if (!lstate.set_output) {
+		for (auto &idx : payload_column_idxs) {
+			if (input.colid_keep_rowid.find(idx) != input.colid_keep_rowid.end() && !input.colid_keep_rowid[idx]) {
+				continue;
+			} else {
+				lstate.payload_column_idxs_new.push_back(idx);
+				lstate.payload_types_new.push_back(chunk.data[idx].GetType());
+			}
+		}
 
+		for (auto &[idx, type] : input.materialize_column_types) {
+			lstate.payload_column_idxs_new.push_back(idx);
+			lstate.payload_types_new.push_back(LogicalType(LogicalTypeId(type)));
+		}
+		lstate.set_output = true;
+		lstate.payload_chunk_new.Initialize(Allocator::DefaultAllocator(), lstate.payload_types_new);
+	}
 	// resolve the join keys for the right chunk
 	lstate.join_keys.Reset();
 	lstate.join_key_executor.Execute(chunk, lstate.join_keys);

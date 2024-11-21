@@ -313,6 +313,7 @@ OperatorResultType CachingPhysicalOperator::Execute(ExecutionContext &context, D
 		if (!state.cached_chunk) {
 			state.cached_chunk = make_uniq<DataChunk>();
 			state.cached_chunk->Initialize(Allocator::Get(context.client), chunk.GetTypes());
+			state.cached_chunk->disable_columns = chunk.disable_columns;
 		}
 
 		state.cached_chunk->Append(chunk);
@@ -322,6 +323,7 @@ OperatorResultType CachingPhysicalOperator::Execute(ExecutionContext &context, D
 			// chunk cache full: return it
 			chunk.Move(*state.cached_chunk);
 			state.cached_chunk->Initialize(Allocator::Get(context.client), chunk.GetTypes());
+			state.cached_chunk->disable_columns = chunk.disable_columns;
 			return child_result;
 		} else {
 			// chunk cache not full return empty result

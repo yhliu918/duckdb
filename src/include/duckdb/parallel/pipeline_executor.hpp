@@ -21,7 +21,6 @@
 
 namespace duckdb {
 class Executor;
-#define CHUNK_QUEUE_THRESHOLD 2
 
 //! The result of executing a PipelineExecutor
 enum class PipelineExecuteResult {
@@ -52,6 +51,8 @@ public:
 	//! Called after depleting the source: finalizes the execution of this pipeline executor
 	//! This should only be called once per PipelineExecutor.
 	PipelineExecuteResult PushFinalize();
+
+	void FlushQueuedChunks();
 
 	bool RemainingSinkChunk() const;
 

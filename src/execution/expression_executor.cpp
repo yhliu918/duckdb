@@ -73,6 +73,9 @@ void ExpressionExecutor::Execute(DataChunk *input, DataChunk &result) {
 	D_ASSERT(!expressions.empty());
 
 	for (idx_t i = 0; i < expressions.size(); i++) {
+		if (result.disable_columns[i] == 1) {
+			continue;
+		}
 		ExecuteExpression(i, result.data[i]);
 	}
 	result.SetCardinality(input ? input->size() : 1);

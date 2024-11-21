@@ -8,14 +8,14 @@
 
 #pragma once
 
-#include "duckdb/common/common.hpp"
-#include "duckdb/execution/physical_operator.hpp"
-#include "duckdb/planner/logical_operator.hpp"
-#include "duckdb/planner/logical_tokens.hpp"
-#include "duckdb/planner/joinside.hpp"
 #include "duckdb/catalog/dependency_list.hpp"
+#include "duckdb/common/common.hpp"
 #include "duckdb/common/unordered_map.hpp"
 #include "duckdb/common/unordered_set.hpp"
+#include "duckdb/execution/physical_operator.hpp"
+#include "duckdb/planner/joinside.hpp"
+#include "duckdb/planner/logical_operator.hpp"
+#include "duckdb/planner/logical_tokens.hpp"
 
 namespace duckdb {
 class ClientContext;
@@ -35,6 +35,8 @@ public:
 	//! Materialized CTE ids must be collected.
 	unordered_map<idx_t, vector<const_reference<PhysicalOperator>>> materialized_ctes;
 
+	int operator_idx = 0;
+
 public:
 	//! Creates a plan from the logical operator. This involves resolving column bindings and generating physical
 	//! operator nodes.
@@ -46,6 +48,10 @@ public:
 	static bool PreserveInsertionOrder(ClientContext &context, PhysicalOperator &plan);
 
 	static bool HasEquality(vector<JoinCondition> &conds, idx_t &range_count);
+
+	std::string PrintOperator(const unique_ptr<PhysicalOperator> &plan);
+
+	std::vector<std::string> PrintOperatorCatalog(const unique_ptr<PhysicalOperator> &plan);
 
 protected:
 	unique_ptr<PhysicalOperator> CreatePlan(LogicalOperator &op);
