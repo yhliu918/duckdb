@@ -196,7 +196,7 @@ void Pipeline::ResetSink() {
 			// 	unordered_map<int, bool> rowid_col_keep;
 			// 	// read config file, we need the final output type list
 			// 	std::ifstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/pipeline" +
-			// 	                       std::to_string(pipeine_id),
+			// 	                       std::to_string(pipeline_id),
 			// 	                   std::ios::in);
 			// 	if (file.is_open()) {
 			// 		// basic config

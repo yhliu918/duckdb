@@ -1,0 +1,55 @@
+{
+    "must_enable_columns_end": [
+        "rowid(supplier)",
+        "s_address",
+        "rowid(partsupp)",
+        "ps_availqty",
+        "ps_comment",
+        "p_name"
+    ],
+    "must_enable_columns_start": [
+        "p_partkey"
+    ],
+    "operators": [
+        {
+            "name": "SEQ_SCAN ",
+            "names": [
+                "p_partkey",
+                "p_name"
+            ],
+            "op_index": 0
+        },
+        {
+            "name": "HASH_JOIN",
+            "names": [
+                "p_partkey",
+                "p_name",
+                "ps_partkey",
+                "ps_availqty",
+                "ps_comment",
+                "rowid(partsupp)",
+                "s_address",
+                "rowid(supplier)"
+            ],
+            "op_index": 4
+        },
+        {
+            "name": "PROJECTION",
+            "names": [
+                "p_name",
+                "ps_availqty",
+                "ps_comment",
+                "rowid(partsupp)",
+                "s_address",
+                "rowid(supplier)"
+            ],
+            "op_index": 5
+        },
+        {
+            "name": "RESULT_COLLECTOR"
+        }
+    ],
+    "parent": 0,
+    "pipeline_id": 1,
+    "table": "part"
+}

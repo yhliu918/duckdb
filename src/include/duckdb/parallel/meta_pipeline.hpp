@@ -80,7 +80,7 @@ public:
 	//! Ready all the pipelines (recursively)
 	void Ready() const;
 
-	int Readynew(int pipeline_id = 0);
+	int Readynew(int pipeline_id = 0, int parent_pipe_id = 0);
 
 	//! Create an empty pipeline within this MetaPipeline
 	Pipeline &CreatePipeline();

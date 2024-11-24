@@ -99,6 +99,7 @@ public:
 
 	//! The indices for getting the payload columns
 	vector<idx_t> payload_column_idxs;
+	vector<idx_t> payload_column_idxs_total;
 	//! The types of the payload columns
 	vector<LogicalType> payload_types;
 

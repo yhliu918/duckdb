@@ -7,7 +7,9 @@
 #include "duckdb/execution/operator/scan/physical_table_scan.hpp"
 #include "duckdb/function/table/table_scan.hpp"
 #include "duckdb/main/client_context.hpp"
+#include "json.hpp"
 
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <sys/time.h>
@@ -18,16 +20,16 @@
 #include <chrono>
 #include <thread>
 #endif
-
+using json = nlohmann::json;
 namespace duckdb {
 double getNow() {
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
 	return tv.tv_sec * 1000.0 + tv.tv_usec / 1000.0;
 }
-void parse_materialize_config(Pipeline &pipeline_p, bool read_mat_info = false) {
+void PipelineExecutor::parse_materialize_config(Pipeline &pipeline_p, bool read_mat_info) {
 	std::ifstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/pipeline" +
-	                       std::to_string(pipeline_p.pipeine_id),
+	                       std::to_string(pipeline_p.pipeline_id),
 	                   std::ios::in);
 	if (file.is_open()) {
 		// basic config
@@ -51,13 +53,20 @@ void parse_materialize_config(Pipeline &pipeline_p, bool read_mat_info = false) 
 				int keep_rowid;
 				idx_t table_col_idx;
 				idx_t result_col_idx;
+				std::string mat_key_name;
+				std::string rowid_name;
 				int dependent_pipeline;
 				int logical_type;
 				int string_length = 0;
 				int lines = 0;
-				file >> dependent_pipeline >> keep_rowid >> rowid_col_idx >> lines;
+				file >> dependent_pipeline >> keep_rowid >> lines >> rowid_name;
+				auto &chunk_layout = pipeline_p.operators[pipeline_p.operators.size() - 1].get().names;
+				rowid_col_idx = std::find(chunk_layout.begin(), chunk_layout.end(), rowid_name) - chunk_layout.begin();
+
 				for (int j = 0; j < lines; j++) {
-					file >> table_col_idx >> result_col_idx >> logical_type;
+					file >> mat_key_name >> table_col_idx >> logical_type;
+					result_col_idx =
+					    std::find(chunk_layout.begin(), chunk_layout.end(), mat_key_name) - chunk_layout.begin();
 					col_map[table_col_idx] = result_col_idx;
 					col_types[result_col_idx] = logical_type;
 					if (LogicalTypeId(logical_type) == LogicalTypeId::VARCHAR) {
@@ -74,13 +83,81 @@ void parse_materialize_config(Pipeline &pipeline_p, bool read_mat_info = false) 
 		file.close();
 	}
 }
+void PipelineExecutor::dump_pipeline_info(Pipeline &pipeline_p) {
+	std::unordered_set<std::string> must_enable_columns_when_start;
+	std::unordered_set<std::string> must_enable_columns_when_end;
+	json j;
+	int op_index = 0;
+	for (auto &op : pipeline_p.GetOperators()) {
+		if (op.get().type == PhysicalOperatorType::HASH_JOIN) {
+			if (&op.get() != pipeline_p.GetSink().get()) {
+				//! is probe side
+				must_enable_columns_when_start.insert(op.get().must_enables_left.begin(),
+				                                      op.get().must_enables_left.end());
+			} else {
+				//! is build side
+				must_enable_columns_when_end.insert(op.get().must_enables_right.begin(),
+				                                    op.get().must_enables_right.end());
+			}
+		}
+		int operator_index = 0;
+		if (op.get().operator_index) {
+			operator_index = op.get().operator_index;
+		}
+		j["operators"][op_index]["name"] = op.get().GetName();
+		for (auto &name : op.get().names) {
+			j["operators"][op_index]["op_index"] = operator_index;
+			j["operators"][op_index]["names"].push_back(name);
+		}
+		op_index++;
+	}
+	auto sink = pipeline_p.GetSink();
+	if (sink && sink->type == PhysicalOperatorType::RESULT_COLLECTOR) {
+		auto &last_op = pipeline_p.operators.empty() ? *pipeline_p.source : pipeline_p.operators.back().get();
+		for (int i = 0; i < last_op.names.size(); i++) {
+			must_enable_columns_when_end.insert(last_op.names[i]);
+		}
+	}
+	for (auto &col : must_enable_columns_when_start) {
+		j["must_enable_columns_start"].push_back(col);
+	}
+	for (auto &col : must_enable_columns_when_end) {
+		j["must_enable_columns_end"].push_back(col);
+	}
+	j["pipeline_id"] = pipeline_p.pipeline_id;
+	j["parent"] = pipeline_p.parent;
+	auto source = pipeline_p.GetSource();
+	if (source && source->type == PhysicalOperatorType::TABLE_SCAN) {
+		j["table"] = pipeline_p.GetSource()->Cast<PhysicalTableScan>().table_name;
+	}
+
+	std::ofstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/query/pipeline" +
+	                       std::to_string(pipeline_p.pipeline_id) + ".json",
+	                   std::ios::out);
+	if (file.is_open()) {
+		file << j.dump(4);
+		file.close();
+	}
+}
 
 PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_p)
     : pipeline(pipeline_p), thread(context_p), context(context_p, thread, &pipeline_p) {
 	D_ASSERT(pipeline.source_state);
 	int num = 0;
-	if (pipeline.pipeine_id) {
-		std::cout << pipeline.pipeine_id << " " << pipeline.ToString() << std::endl;
+	if (pipeline.pipeline_id && pipeline.GetSource()->type == PhysicalOperatorType::TABLE_SCAN &&
+	    pipeline.GetSink()->type != PhysicalOperatorType::CREATE_TABLE_AS) {
+		bool dump = false;
+		const char *dump_env = std::getenv("DUMP_PIPELINE_INFO");
+		if (dump_env != nullptr) {
+			int dump_value = std::atoi(dump_env);
+			dump = (dump_value == 1);
+		}
+		if (dump) {
+			std::cout << "Dumping pipeline info" << std::endl;
+			dump_pipeline_info(pipeline);
+		}
+
+		std::cout << pipeline.pipeline_id << " " << pipeline.parent << " " << pipeline.ToString() << std::endl;
 	}
 	parse_materialize_config(pipeline, false);
 	if (pipeline.sink) {
@@ -145,18 +222,12 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 		auto &current_operator = pipeline.operators[i].get();
 
 		auto chunk = make_uniq<DataChunk>();
-		if (pipeline.pipeine_id) {
-			std::cout << prev_operator.GetName() << " ";
-			for (auto &type : prev_operator.GetTypes()) {
-				std::cout << type.ToString() << " ";
-			}
-			std::cout << std::endl;
-		}
-		// auto types = prev_operator.GetTypes();
-		// if (prev_operator.type == PhysicalOperatorType::HASH_JOIN) {
-		// 	if (pipeline_p.pipeine_id == 1) {
-		// 		types[4] = LogicalType::BIGINT;
+		// if (pipeline.pipeline_id) {
+		// 	std::cout << prev_operator.GetName() << " ";
+		// 	for (auto &type : prev_operator.GetTypes()) {
+		// 		std::cout << type.ToString() << " ";
 		// 	}
+		// 	std::cout << std::endl;
 		// }
 		chunk->Initialize(Allocator::Get(context.client), prev_operator.GetTypes());
 		chunk->disable_columns = std::move(prev_operator.disable_columns);
@@ -173,14 +244,6 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 		}
 	}
 
-	// if (pipeline.materialize_flag && pipeline.materialize_strategy_mode == 1) {
-	// 	auto &last_op = pipeline.operators.empty() ? *pipeline.source : pipeline.operators.back().get();
-	// 	auto types = last_op.GetTypes();
-	// 	auto chunk = make_uniq<DataChunk>();
-	// 	chunk->Initialize(Allocator::Get(context.client), types);
-	// 	intermediate_chunks.push_back(std::move(chunk));
-	// }
-
 	if (pipeline.materialize_strategy_mode == 1) {
 		int row_id_column_number = pipeline.materialize_maps.size();
 		for (auto &[rowid_col_idx, mat_map] : pipeline.materialize_maps) {
@@ -194,13 +257,13 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 	}
 
 	InitializeChunk(final_chunk);
-	if (pipeline.pipeine_id) {
-		std::cout << "final chunk ";
-		for (auto &type : final_chunk.GetTypes()) {
-			std::cout << type.ToString() << " ";
-		}
-		std::cout << std::endl;
-	}
+	// if (pipeline.pipeline_id) {
+	// 	std::cout << "final chunk ";
+	// 	for (auto &type : final_chunk.GetTypes()) {
+	// 		std::cout << type.ToString() << " ";
+	// 	}
+	// 	std::cout << std::endl;
+	// }
 	if (pipeline.materialize_strategy_mode == 1) {
 		for (int i = 0; i < pipeline.chunk_queue_threshold; i++) {
 			auto chunk = make_uniq<DataChunk>();
@@ -456,7 +519,7 @@ void PipelineExecutor::FlushQueuedChunks() {
 	for (auto &[rowid_col_idx, mat_map] : pipeline.materialize_maps) {
 		for (auto &[col_idx, result_col_index] : mat_map.materialize_column_ids) {
 			types.push_back(chunk_queue[0]->data[result_col_index].GetType());
-			mat_col_write_idx[col_idx] = types.size() - 1;
+			mat_col_write_idx[result_col_index] = types.size() - 1;
 		}
 	}
 	DataChunk mat_chunk;
@@ -468,7 +531,7 @@ void PipelineExecutor::FlushQueuedChunks() {
 		unordered_map<int64_t, int64_t> materialize_column_ids_new;
 		unordered_map<int64_t, int32_t> fixed_len_strings_columns_new;
 		for (auto &[col_idx, result_col_index] : mat_map.materialize_column_ids) {
-			int write_col_idx = mat_col_write_idx[col_idx];
+			int write_col_idx = mat_col_write_idx[result_col_index];
 			materialize_column_ids_new[col_idx] = write_col_idx;
 			if (mat_map.fixed_len_strings_columns.find(result_col_index) != mat_map.fixed_len_strings_columns.end()) {
 				fixed_len_strings_columns_new[write_col_idx] = mat_map.fixed_len_strings_columns[result_col_index];
@@ -488,7 +551,6 @@ void PipelineExecutor::FlushQueuedChunks() {
 		                                    nullptr,
 		                                    &inverted_indexnew[rowid_col_idx]};
 
-		// std::cout << "cardinality " << result_index << std::endl;
 		auto res = mat_source.materialize_source->GetData(context, mat_chunk, source_input);
 	}
 	mat_chunk.SetCardinality(result_index.begin()->second);
@@ -539,7 +601,6 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 			double materialize_start = getNow();
 			if (pipeline.materialize_strategy_mode == 1) {
 				chunk_queue.emplace_back(&sink_chunk);
-				// std::cout << "sink chunk size:" << sink_chunk.size() << std::endl;
 				chunk_counter++;
 				// build inverted index
 				for (auto &[rowid_col_idx, mat_map] : pipeline.materialize_maps) {
@@ -590,7 +651,6 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 						}
 					}
 					double sink_start = getNow();
-					// std::cout << "sink_start: " << chunk->size() << std::endl;
 					sink_result = Sink(*chunk, sink_input);
 					double sink_end = getNow();
 					pipeline.incrementOperatorTime(sink_end - sink_start, pipeline.operators.size());
@@ -660,7 +720,6 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 			double sink_start = getNow();
 			auto sink_result = Sink(*chunk, sink_input);
 			double sink_end = getNow();
-			// std::cout << "combine:" << chunk->size() << std::endl;
 			pipeline.incrementOperatorTime(sink_end - sink_start, pipeline.operators.size());
 		}
 
@@ -702,11 +761,11 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 		intermediate_states[i]->Finalize(pipeline.operators[i].get(), context);
 	}
 	pipeline.mat_lock.lock();
-	if (pipeline.sink->type == PhysicalOperatorType::HASH_JOIN && pipeline.push_source && pipeline.pipeine_id != 0) {
+	if (pipeline.sink->type == PhysicalOperatorType::HASH_JOIN && pipeline.push_source && pipeline.pipeline_id != 0) {
 		pipeline.thread_num--;
 		if (pipeline.thread_num == 0) {
 			pipeline.sink->sink_state->Cast<HashJoinGlobalSinkState>().SetSource(
-			    pipeline.pipeine_id,
+			    pipeline.pipeline_id,
 			    pipeline.source.get()
 			        ->Cast<PhysicalTableScan>()
 			        .bind_data->Cast<TableScanBindData>()
@@ -719,7 +778,7 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 	}
 
 	bool print = pipeline.operators.size() > 0 || pipeline.sink->type != PhysicalOperatorType::CREATE_TABLE_AS;
-	// print = false;
+	print = false;
 	if (print) {
 		std::cout << "----------------------------" << std::endl;
 		for (int i = 0; i < pipeline.operator_total_time.size() - 1; i++) {

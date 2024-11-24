@@ -1,0 +1,294 @@
+{
+    "customer": {
+        "c_custkey": {
+            "col_id": 0,
+            "type": 14
+        },
+        "c_name": {
+            "col_id": 1,
+            "type": 25
+        },
+        "c_address": {
+            "col_id": 2,
+            "type": 25
+        },
+        "c_nationkey": {
+            "col_id": 3,
+            "type": 13
+        },
+        "c_phone": {
+            "col_id": 4,
+            "type": 25
+        },
+        "c_acctbal": {
+            "col_id": 5,
+            "type": 23
+        },
+        "c_mktsegment": {
+            "col_id": 6,
+            "type": 25
+        },
+        "c_comment": {
+            "col_id": 7,
+            "type": 25
+        },
+        "rowid(customer)": {
+            "col_id": 8,
+            "type": 14
+        }
+    },
+    "lineitem": {
+        "l_orderkey": {
+            "col_id": 0,
+            "type": 14
+        },
+        "l_partkey": {
+            "col_id": 1,
+            "type": 14
+        },
+        "l_suppkey": {
+            "col_id": 2,
+            "type": 14
+        },
+        "l_linenumber": {
+            "col_id": 3,
+            "type": 14
+        },
+        "l_quantity": {
+            "col_id": 4,
+            "type": 23
+        },
+        "l_extendedprice": {
+            "col_id": 5,
+            "type": 23
+        },
+        "l_discount": {
+            "col_id": 6,
+            "type": 23
+        },
+        "l_tax": {
+            "col_id": 7,
+            "type": 23
+        },
+        "l_returnflag": {
+            "col_id": 8,
+            "type": 25
+        },
+        "l_linestatus": {
+            "col_id": 9,
+            "type": 25
+        },
+        "l_shipdate": {
+            "col_id": 10,
+            "type": 15
+        },
+        "l_commitdate": {
+            "col_id": 11,
+            "type": 15
+        },
+        "l_receiptdate": {
+            "col_id": 12,
+            "type": 15
+        },
+        "l_shipinstruct": {
+            "col_id": 13,
+            "type": 25
+        },
+        "l_shipmode": {
+            "col_id": 14,
+            "type": 25
+        },
+        "l_comment": {
+            "col_id": 15,
+            "type": 25
+        },
+        "rowid(lineitem)": {
+            "col_id": 16,
+            "type": 14
+        }
+    },
+    "nation": {
+        "n_nationkey": {
+            "col_id": 0,
+            "type": 13
+        },
+        "n_name": {
+            "col_id": 1,
+            "type": 25
+        },
+        "n_regionkey": {
+            "col_id": 2,
+            "type": 13
+        },
+        "n_comment": {
+            "col_id": 3,
+            "type": 25
+        },
+        "rowid(nation)": {
+            "col_id": 4,
+            "type": 14
+        }
+    },
+    "orders": {
+        "o_orderkey": {
+            "col_id": 0,
+            "type": 14
+        },
+        "o_custkey": {
+            "col_id": 1,
+            "type": 14
+        },
+        "o_orderstatus": {
+            "col_id": 2,
+            "type": 25
+        },
+        "o_totalprice": {
+            "col_id": 3,
+            "type": 23
+        },
+        "o_orderdate": {
+            "col_id": 4,
+            "type": 15
+        },
+        "o_orderpriority": {
+            "col_id": 5,
+            "type": 25
+        },
+        "o_clerk": {
+            "col_id": 6,
+            "type": 25
+        },
+        "o_shippriority": {
+            "col_id": 7,
+            "type": 13
+        },
+        "o_comment": {
+            "col_id": 8,
+            "type": 25
+        },
+        "rowid(orders)": {
+            "col_id": 9,
+            "type": 14
+        }
+    },
+    "partsupp": {
+        "ps_partkey": {
+            "col_id": 0,
+            "type": 14
+        },
+        "ps_suppkey": {
+            "col_id": 1,
+            "type": 14
+        },
+        "ps_availqty": {
+            "col_id": 2,
+            "type": 14
+        },
+        "ps_supplycost": {
+            "col_id": 3,
+            "type": 23
+        },
+        "ps_comment": {
+            "col_id": 4,
+            "type": 25
+        },
+        "rowid(partsupp)": {
+            "col_id": 5,
+            "type": 14
+        }
+    },
+    "part": {
+        "p_partkey": {
+            "col_id": 0,
+            "type": 14
+        },
+        "p_name": {
+            "col_id": 1,
+            "type": 25
+        },
+        "p_mfgr": {
+            "col_id": 2,
+            "type": 25
+        },
+        "p_brand": {
+            "col_id": 3,
+            "type": 25
+        },
+        "p_type": {
+            "col_id": 4,
+            "type": 25
+        },
+        "p_size": {
+            "col_id": 5,
+            "type": 13
+        },
+        "p_container": {
+            "col_id": 6,
+            "type": 25
+        },
+        "p_retailprice": {
+            "col_id": 7,
+            "type": 23
+        },
+        "p_comment": {
+            "col_id": 8,
+            "type": 25
+        },
+        "rowid(part)": {
+            "col_id": 9,
+            "type": 14
+        }
+    },
+    "region": {
+        "r_regionkey": {
+            "col_id": 0,
+            "type": 13
+        },
+        "r_name": {
+            "col_id": 1,
+            "type": 25
+        },
+        "r_comment": {
+            "col_id": 2,
+            "type": 25
+        },
+        "rowid(region)": {
+            "col_id": 3,
+            "type": 14
+        }
+    },
+    "supplier": {
+        "s_suppkey": {
+            "col_id": 0,
+            "type": 14
+        },
+        "s_name": {
+            "col_id": 1,
+            "type": 25
+        },
+        "s_address": {
+            "col_id": 2,
+            "type": 25
+        },
+        "s_nationkey": {
+            "col_id": 3,
+            "type": 13
+        },
+        "s_phone": {
+            "col_id": 4,
+            "type": 25
+        },
+        "s_acctbal": {
+            "col_id": 5,
+            "type": 23
+        },
+        "s_comment": {
+            "col_id": 6,
+            "type": 25
+        },
+        "rowid(supplier)": {
+            "col_id": 7,
+            "type": 14
+        }
+    }
+}

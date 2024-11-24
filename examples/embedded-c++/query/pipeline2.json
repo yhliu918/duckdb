@@ -1,0 +1,52 @@
+{
+    "must_enable_columns_end": [
+        "ps_partkey"
+    ],
+    "must_enable_columns_start": [
+        "ps_suppkey"
+    ],
+    "operators": [
+        {
+            "name": "SEQ_SCAN ",
+            "names": [
+                "ps_suppkey",
+                "ps_partkey",
+                "ps_availqty",
+                "ps_comment",
+                "rowid(partsupp)"
+            ],
+            "op_index": 1
+        },
+        {
+            "name": "HASH_JOIN",
+            "names": [
+                "ps_suppkey",
+                "ps_partkey",
+                "ps_availqty",
+                "ps_comment",
+                "rowid(partsupp)",
+                "s_suppkey",
+                "s_address",
+                "rowid(supplier)"
+            ],
+            "op_index": 3
+        },
+        {
+            "name": "HASH_JOIN",
+            "names": [
+                "p_partkey",
+                "p_name",
+                "ps_partkey",
+                "ps_availqty",
+                "ps_comment",
+                "rowid(partsupp)",
+                "s_address",
+                "rowid(supplier)"
+            ],
+            "op_index": 4
+        }
+    ],
+    "parent": 1,
+    "pipeline_id": 2,
+    "table": "partsupp"
+}

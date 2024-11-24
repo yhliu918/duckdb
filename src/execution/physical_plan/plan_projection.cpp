@@ -44,7 +44,7 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalProjection
 		}
 	}
 	projection->disable_columns = std::move(disable_column);
-	projection->output_disable_columns = plan->disable_columns;
+	projection->output_disable_columns = projection->disable_columns;
 	projection->children.push_back(std::move(plan));
 
 	return std::move(projection);

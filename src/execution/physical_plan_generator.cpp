@@ -234,24 +234,28 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalOperator &
 	}
 	plan->operator_index = operator_idx;
 	operator_idx++;
+	auto res_types = PrintOperatorCatalog(plan);
+	// for (auto &res_type : res_types) {
+	// 	std::cout << res_type << std::endl;
+	// }
+	plan->names = std::move(res_types);
+
 	std::ifstream infile;
 	infile.open("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/op_mat_" +
 	                std::to_string(plan->operator_index),
 	            std::ios::in);
 	if (infile.is_open()) {
-		int mat_col = 0;
-		while (infile >> mat_col) {
+		std::string mat_name;
+		while (infile >> mat_name) {
+			int mat_col = std::find(plan->names.begin(), plan->names.end(), mat_name) - plan->names.begin();
 			assert(plan->output_disable_columns[mat_col] != 0);
 			plan->output_disable_columns[mat_col] = 0;
 		}
 	}
 
-	std::string op_str = PrintOperator(plan);
-	std::cout << op_str << std::endl;
-	auto res_types = PrintOperatorCatalog(plan);
-	for (auto &res_type : res_types) {
-		std::cout << res_type << std::endl;
-	}
+	// std::string op_str = PrintOperator(plan);
+	// std::cout << op_str << std::endl;
+
 	// std::ofstream myfile;
 	// myfile.open("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/op" +
 	//                 std::to_string(plan->operator_index),
@@ -364,6 +368,18 @@ std::vector<std::string> PhysicalPlanGenerator::PrintOperatorCatalog(const uniqu
 			right_join_keys.push_back(right_idx);
 			op_str.push_back(op_str_child_right[right_idx]);
 		}
+		if (plan->must_enables_left.size() == 0) {
+			for (int i = 0; i < hash_join.condition_types.size(); i++) {
+				int left_idx = hash_join.conditions[i].left->Cast<BoundReferenceExpression>().index;
+				plan->must_enables_left.push_back(op_str_child_left[left_idx]);
+			}
+		}
+		if (plan->must_enables_right.size() == 0) {
+			for (int i = 0; i < hash_join.condition_types.size(); i++) {
+				int right_idx = hash_join.conditions[i].right->Cast<BoundReferenceExpression>().index;
+				plan->must_enables_right.push_back(op_str_child_right[right_idx]);
+			}
+		}
 		// payload columns
 		// if right child has disabled columns, return all columns
 		bool right_has_disabled = false;
@@ -374,10 +390,8 @@ std::vector<std::string> PhysicalPlanGenerator::PrintOperatorCatalog(const uniqu
 			}
 		}
 		if (right_has_disabled) {
-			for (int i = 0; i < op_str_child_right.size(); i++) {
-				if (right_join_keys.end() == std::find(right_join_keys.begin(), right_join_keys.end(), i)) {
-					op_str.push_back(op_str_child_right[i]);
-				}
+			for (int i = 0; i < hash_join.payload_column_idxs_total.size(); i++) {
+				op_str.push_back(op_str_child_right[hash_join.payload_column_idxs_total[i]]);
 			}
 		} else {
 			for (int i = 0; i < hash_join.payload_column_idxs.size(); i++) {

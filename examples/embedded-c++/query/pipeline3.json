@@ -1,0 +1,33 @@
+{
+    "must_enable_columns_end": [
+        "s_suppkey"
+    ],
+    "operators": [
+        {
+            "name": "SEQ_SCAN ",
+            "names": [
+                "s_suppkey",
+                "s_address",
+                "rowid(supplier)"
+            ],
+            "op_index": 2
+        },
+        {
+            "name": "HASH_JOIN",
+            "names": [
+                "ps_suppkey",
+                "ps_partkey",
+                "ps_availqty",
+                "ps_comment",
+                "rowid(partsupp)",
+                "s_suppkey",
+                "s_address",
+                "rowid(supplier)"
+            ],
+            "op_index": 3
+        }
+    ],
+    "parent": 2,
+    "pipeline_id": 3,
+    "table": "supplier"
+}

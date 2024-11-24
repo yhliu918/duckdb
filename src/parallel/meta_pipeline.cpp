@@ -97,16 +97,17 @@ void MetaPipeline::Ready() const {
 	}
 }
 
-int MetaPipeline::Readynew(int pipe_id) {
+int MetaPipeline::Readynew(int pipe_id, int parent_pipe_id) {
 	for (int i = 0; i < pipelines.size(); i++) {
 		pipelines[i]->Ready();
 		if (pipelines.size() > 1 && pipelines[i]->source->type != PhysicalOperatorType::TABLE_SCAN) {
 			continue;
 		}
-		pipelines[i]->pipeine_id = pipe_id++;
+		pipelines[i]->pipeline_id = pipe_id++;
+		pipelines[i]->parent = parent_pipe_id;
 	}
 	for (auto &child : children) {
-		int result_pipeid = child->Readynew(pipe_id);
+		int result_pipeid = child->Readynew(pipe_id, pipe_id - 1);
 		pipe_id = result_pipeid;
 	}
 	return pipe_id;

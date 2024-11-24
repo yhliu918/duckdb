@@ -182,7 +182,8 @@ public:
 	double mat_operator_time = 0;
 	double map_building_time = 0;
 	double total_time = 0;
-	int pipeine_id = 0;
+	int pipeline_id = 0;
+	int parent = 0;
 	bool push_source = false;
 	unordered_map<int, MaterializeMap> materialize_maps;   // rowid_col_idx -> MaterializeMap
 	unordered_map<int, MatSourceInfo> materialize_sources; // pipelineid -> MatSourceInfo

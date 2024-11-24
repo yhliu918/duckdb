@@ -1,4 +1,7 @@
+#include "duckdb/catalog/catalog_entry/duck_table_entry.hpp"
+#include "duckdb/common/operator/subtract.hpp"
 #include "duckdb/execution/operator/join/perfect_hash_join_executor.hpp"
+#include "duckdb/execution/operator/join/physical_blockwise_nl_join.hpp"
 #include "duckdb/execution/operator/join/physical_cross_product.hpp"
 #include "duckdb/execution/operator/join/physical_hash_join.hpp"
 #include "duckdb/execution/operator/join/physical_iejoin.hpp"
@@ -8,13 +11,10 @@
 #include "duckdb/execution/physical_plan_generator.hpp"
 #include "duckdb/function/table/table_scan.hpp"
 #include "duckdb/main/client_context.hpp"
-#include "duckdb/planner/operator/logical_comparison_join.hpp"
-#include "duckdb/transaction/duck_transaction.hpp"
-#include "duckdb/common/operator/subtract.hpp"
-#include "duckdb/execution/operator/join/physical_blockwise_nl_join.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/expression_iterator.hpp"
-#include "duckdb/catalog/catalog_entry/duck_table_entry.hpp"
+#include "duckdb/planner/operator/logical_comparison_join.hpp"
+#include "duckdb/transaction/duck_transaction.hpp"
 
 namespace duckdb {
 
@@ -114,6 +114,7 @@ void CheckForPerfectJoinOpt(LogicalComparisonJoin &op, PerfectHashJoinStats &joi
 	join_state.build_max = NumericStats::Max(stats_build);
 	join_state.estimated_cardinality = op.estimated_cardinality;
 	join_state.build_range = NumericCast<idx_t>(build_range);
+	// std::cout << join_state.build_min << " " << join_state.build_max << std::endl;
 	if (join_state.build_range > MAX_BUILD_SIZE) {
 		return;
 	}

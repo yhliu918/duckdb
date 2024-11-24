@@ -26,8 +26,8 @@ public:
 	PhysicalTableScan(vector<LogicalType> types, TableFunction function, unique_ptr<FunctionData> bind_data,
 	                  vector<LogicalType> returned_types, vector<column_t> column_ids, vector<idx_t> projection_ids,
 	                  vector<string> names, unique_ptr<TableFilterSet> table_filters, idx_t estimated_cardinality,
-	                  ExtraOperatorInfo extra_info, vector<Value> parameters, vector<int> disable_columns = {},
-	                  vector<idx_t> projection_columns = {});
+	                  ExtraOperatorInfo extra_info, vector<Value> parameters, std::string table_name,
+	                  vector<int> disable_columns = {}, vector<idx_t> projection_columns = {});
 
 	//! The table function
 	TableFunction function;
@@ -45,6 +45,8 @@ public:
 	vector<idx_t> projection_ids_total;
 	//! The names of the columns
 	vector<string> names;
+
+	std::string table_name;
 	//! The table filters
 	unique_ptr<TableFilterSet> table_filters;
 	//! Currently stores info related to filters pushed down into MultiFileLists

@@ -399,7 +399,7 @@ void Executor::InitializeInternal(PhysicalOperator &plan) {
 		PipelineBuildState state;
 		auto root_pipeline = make_shared_ptr<MetaPipeline>(*this, state, nullptr);
 		root_pipeline->Build(*physical_plan);
-		root_pipeline->Readynew(0);
+		root_pipeline->Readynew(0, 0);
 
 		// ready recursive cte pipelines too
 		for (auto &rec_cte_ref : recursive_ctes) {

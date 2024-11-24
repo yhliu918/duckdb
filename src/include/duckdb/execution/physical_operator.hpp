@@ -41,6 +41,8 @@ public:
 	    : type(type), types(std::move(types)), estimated_cardinality(estimated_cardinality) {
 		disable_columns = {};
 		output_disable_columns = {};
+		must_enables_left = {};
+		must_enables_right = {};
 	}
 
 	virtual ~PhysicalOperator() {
@@ -64,6 +66,9 @@ public:
 	std::vector<int> disable_columns;
 	std::vector<int> output_disable_columns;
 	int operator_index = 0;
+	std::vector<std::string> names;
+	std::vector<std::string> must_enables_left;
+	std::vector<std::string> must_enables_right;
 
 public:
 	virtual string GetName() const;

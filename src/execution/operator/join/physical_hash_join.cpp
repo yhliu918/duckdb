@@ -75,6 +75,7 @@ PhysicalHashJoin::PhysicalHashJoin(LogicalOperator &op, unique_ptr<PhysicalOpera
 	for (auto &rhs_col : right_projection_map_copy) {
 		if (children[1]->output_disable_columns.size() && children[1]->output_disable_columns[rhs_col]) {
 			this->disable_columns.push_back(1);
+			payload_column_idxs_total.push_back(rhs_col);
 			continue;
 		}
 		auto &rhs_col_type = rhs_input_types[rhs_col];
@@ -83,6 +84,7 @@ PhysicalHashJoin::PhysicalHashJoin(LogicalOperator &op, unique_ptr<PhysicalOpera
 		if (it == build_columns_in_conditions.end()) {
 			// This rhs column is not a join key
 			payload_column_idxs.push_back(rhs_col);
+			payload_column_idxs_total.push_back(rhs_col);
 			payload_types.push_back(rhs_col_type);
 			rhs_output_columns.push_back(condition_types.size() + payload_types.size() - 1);
 		} else {

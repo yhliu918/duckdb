@@ -1,3 +1,4 @@
+#include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 #include "duckdb/execution/operator/filter/physical_filter.hpp"
 #include "duckdb/execution/operator/projection/physical_projection.hpp"
 #include "duckdb/execution/operator/projection/physical_tableinout_function.hpp"
@@ -133,9 +134,10 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalGet &op) {
 	// create the table scan node
 	if (!op.function.projection_pushdown) {
 		// function does not support projection pushdown
-		auto node = make_uniq<PhysicalTableScan>(
-		    op.returned_types, op.function, std::move(op.bind_data), op.returned_types, column_ids, vector<column_t>(),
-		    op.names, std::move(table_filters), op.estimated_cardinality, op.extra_info, std::move(op.parameters));
+		auto node = make_uniq<PhysicalTableScan>(op.returned_types, op.function, std::move(op.bind_data),
+		                                         op.returned_types, column_ids, vector<column_t>(), op.names,
+		                                         std::move(table_filters), op.estimated_cardinality, op.extra_info,
+		                                         std::move(op.parameters), op.GetTable()->GetStorage().GetTableName());
 		// first check if an additional projection is necessary
 		if (column_ids.size() == op.returned_types.size()) {
 			bool projection_necessary = false;
@@ -178,8 +180,11 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalGet &op) {
 		}
 		return std::move(projection);
 	} else {
-		std::ifstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/table" +
-		                       std::to_string(op.table_index),
+		std::string table_name;
+		if (op.GetTable().get() != nullptr) {
+			table_name = op.GetTable()->GetStorage().GetTableName();
+		}
+		std::ifstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/table" + table_name,
 		                   std::ios::in);
 		vector<int> del_column;
 		int column_id;
@@ -206,10 +211,11 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalGet &op) {
 			for (int i = 0; i < column_ids.size(); i++) {
 				disable_column.push_back(0);
 			}
+
 			auto node = make_uniq<PhysicalTableScan>(op.types, op.function, std::move(op.bind_data), op.returned_types,
 			                                         column_ids, op.projection_ids, op.names, std::move(table_filters),
 			                                         op.estimated_cardinality, op.extra_info, std::move(op.parameters),
-			                                         std::move(disable_column));
+			                                         table_name, std::move(disable_column));
 			node->dynamic_filters = op.dynamic_filters;
 			// node->disable_columns = std::move(disable_column);
 			if (filter) {
@@ -251,11 +257,10 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalGet &op) {
 			// for (auto &i : op.projection_ids) {
 			// 	op.types.push_back(op.returned_types[column_ids[i]]);
 			// }
-
 			auto node = make_uniq<PhysicalTableScan>(op.types, op.function, std::move(op.bind_data), op.returned_types,
 			                                         column_ids, projection_ids_old, op.names, std::move(table_filters),
 			                                         op.estimated_cardinality, op.extra_info, std::move(op.parameters),
-			                                         std::move(disable_column), op.projection_ids);
+			                                         table_name, std::move(disable_column), op.projection_ids);
 			// node->disable_columns = std::move(disable_column);
 
 			node->dynamic_filters = op.dynamic_filters;
