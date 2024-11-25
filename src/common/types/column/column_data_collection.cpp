@@ -898,6 +898,9 @@ void ColumnDataCollection::Append(ColumnDataAppendState &state, DataChunk &input
 
 	auto &segment = *segments.back();
 	for (idx_t vector_idx = 0; vector_idx < types.size(); vector_idx++) {
+		if (input.disable_columns[vector_idx] == 1) {
+			continue;
+		}
 		if (IsComplexType(input.data[vector_idx].GetType())) {
 			input.data[vector_idx].Flatten(input.size());
 		}
@@ -911,6 +914,9 @@ void ColumnDataCollection::Append(ColumnDataAppendState &state, DataChunk &input
 		if (append_amount > 0) {
 			idx_t offset = input.size() - remaining;
 			for (idx_t vector_idx = 0; vector_idx < types.size(); vector_idx++) {
+				if (input.disable_columns[vector_idx] == 1) {
+					continue;
+				}
 				ColumnDataMetaData meta_data(copy_functions[vector_idx], segment, state, chunk_data,
 				                             chunk_data.vector_data[vector_idx]);
 				copy_functions[vector_idx].function(meta_data, state.vector_data[vector_idx], input.data[vector_idx],

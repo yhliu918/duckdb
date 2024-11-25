@@ -1,0 +1,1 @@
+select p_name, ps_availqty, ps_comment, s_address from supplier,partsupp,part where ps_suppkey =s_suppkey and p_partkey =  ps_partkey and ps_supplycost<20 and s_nationkey<24;

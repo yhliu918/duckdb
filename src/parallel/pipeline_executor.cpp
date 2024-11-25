@@ -565,6 +565,7 @@ void PipelineExecutor::FlushQueuedChunks() {
 	// slice the mat_chunk into these chunks
 	int start = 0;
 	for (auto chunk : chunk_queue) {
+		chunk->disable_columns = last_op.output_disable_columns;
 		for (auto &[chunk_col_idx, mat_col_idx] : mat_result_write_back) {
 			chunk->data[chunk_col_idx].Slice(mat_chunk.data[mat_col_idx], start, start + chunk->size());
 			chunk->disable_columns[chunk_col_idx] = 0;

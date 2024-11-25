@@ -253,16 +253,21 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalOperator &
 		}
 	}
 
-	// std::string op_str = PrintOperator(plan);
-	// std::cout << op_str << std::endl;
+	std::ifstream disable_columns_file;
+	disable_columns_file.open("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/op_dis_" +
+	                              std::to_string(plan->operator_index),
+	                          std::ios::in);
+	if (disable_columns_file.is_open()) {
+		std::string mat_name;
+		while (disable_columns_file >> mat_name) {
+			int mat_col = std::find(plan->names.begin(), plan->names.end(), mat_name) - plan->names.begin();
+			assert(plan->output_disable_columns[mat_col] == 0);
+			plan->output_disable_columns[mat_col] = 1;
+		}
+	}
 
-	// std::ofstream myfile;
-	// myfile.open("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/op" +
-	//                 std::to_string(plan->operator_index),
-	//             std::ios::out);
-	// for (int i = 0; i < plan->disable_columns.size(); i++) {
-	// 	myfile << plan->disable_columns[i] << std::endl;
-	// }
+	std::string op_str = PrintOperator(plan);
+	std::cout << op_str << std::endl;
 	if (!plan) {
 		throw InternalException("Physical plan generator - no plan generated");
 	}

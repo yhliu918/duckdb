@@ -25,7 +25,8 @@ json schema;
 json plan;
 
 std::unordered_map<std::string, vector<int>>
-find_materialize_position(std::vector<std::string> attribute, std::unordered_map<std::string, int> &from_pipeline) {
+find_materialize_position(std::vector<std::string> attribute, std::unordered_map<std::string, int> &from_pipeline,
+                          std::vector<std::string> &table_names) {
 	std::ifstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/query/tpch_schema.json");
 	file >> schema;
 	file.close();
@@ -59,6 +60,7 @@ find_materialize_position(std::vector<std::string> attribute, std::unordered_map
 				file << schema[it.key()][it2.key()]["col_id"] << std::endl;
 				table_info[it2.key()] = it.key();
 				correct_mat_key[it2.key()] = true;
+				table_names.push_back(it.key());
 			}
 		}
 	}
@@ -109,6 +111,14 @@ find_materialize_position(std::vector<std::string> attribute, std::unordered_map
 void write_materialize_config(std::unordered_map<int, std::vector<std::string>> &materialize_config,
                               std::unordered_map<int, bool> &push_source,
                               unordered_map<std::string, int> &from_pipeline) {
+	std::unordered_map<int, int> inverted_from_pipeline;
+	for (auto &[attr, pipeline_id] : from_pipeline) {
+		inverted_from_pipeline[pipeline_id] = 0;
+	}
+	for (auto &[attr, pipeline_id] : from_pipeline) {
+		inverted_from_pipeline[pipeline_id]++;
+	}
+
 	for (auto &[pos, attrs] : materialize_config) {
 		auto pipeline_ops = plan[std::to_string(pos)]["operators"];
 		assert(pipeline_ops.size() >= 2);
@@ -120,7 +130,18 @@ void write_materialize_config(std::unordered_map<int, std::vector<std::string>> 
 		for (auto &attr : attrs) {
 			from_pipeline_to_attr[from_pipeline[attr]].push_back(attr);
 			file << attr << std::endl;
+			inverted_from_pipeline[from_pipeline[attr]]--;
 		}
+		std::ofstream disable_file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/op_dis_" +
+		                               std::to_string(mat_op_index),
+		                           std::ios::out);
+		for (auto &[pipeline_id, count] : inverted_from_pipeline) {
+			if (count == 0) {
+				std::string table_name = plan[std::to_string(pipeline_id)]["table"];
+				disable_file << "rowid(" << table_name << ")" << std::endl;
+			}
+		}
+
 		std::ofstream pipeline_file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/pipeline" +
 		                                std::to_string(pos),
 		                            std::ios::out);
@@ -168,25 +189,40 @@ int main(int argc, char *argv[]) {
 	}
 
 	print_result = atoi(argv[2]);
-	std::string config_directory = "/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/";
+
+	std::string query_config_path = "/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/query/";
 	if (argc > 3) {
-		config_directory = argv[3];
+		query_config_path = argv[3];
+	}
+	std::string pipeline_config = query_config_path + "pipeline1.json";
+	if (!file_exists(pipeline_config)) {
+		std::cout << "You should first export DUMP_PIPELINE_INFO = 1 and collect the pipeline information first."
+		          << std::endl;
+	}
+
+	std::string query_file = "tmp.sql";
+	if (argc > 4) {
+		query_file = argv[4];
+	}
+	query_file = query_config_path + query_file;
+	std::cout << query_file << std::endl;
+	std::ifstream query_file_stream(query_file, std::ios::in);
+	std::string query;
+	std::string line;
+	while (std::getline(query_file_stream, line)) {
+		query += line + " ";
+	}
+	std::cout << query << std::endl;
+
+	std::string config_directory = "/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/";
+	if (argc > 5) {
+		config_directory = argv[5];
 	}
 
 	std::cout << "Warning: will remove all content files in the config directory first" << std::endl;
 
 	std::string command = "rm " + config_directory + "*";
 	int cmd_result = system(command.c_str());
-
-	std::string query_config_path = "/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/query/";
-	if (argc > 4) {
-		query_config_path = argv[4];
-	}
-	query_config_path += std::string("pipeline1.json");
-	if (!file_exists(query_config_path)) {
-		std::cout << "You should first export DUMP_PIPELINE_INFO = 1 and collect the pipeline information first."
-		          << std::endl;
-	}
 
 	DuckDB db(nullptr);
 	Connection con(db);
@@ -198,12 +234,12 @@ int main(int argc, char *argv[]) {
 	// con.Query("create table lineitem as from '/home/yihao/tpch-dbgen/lineitem.parquet';");
 	con.Query("create table supplier as from '/home/yihao/tpch-dbgen/supplier.parquet';");
 
-	std::string query = "select p_name, ps_availqty, ps_comment, partsupp.rowid, s_address, supplier.rowid from "
-	                    "supplier,partsupp,part "
-	                    "where ps_suppkey "
-	                    "=s_suppkey and p_partkey =  ps_partkey and ps_supplycost<20 and s_nationkey<24;";
+	std::string select_keys = query.substr(0, query.find("from"));
+	std::string left_query = query.substr(query.find("from"));
 	std::vector<std::string> materialize_keys;
 	std::string attribute;
+	std::cout << "These are current select keys:" << std::endl;
+	std::cout << select_keys << std::endl;
 	std::cout << "Please input the materialize keys, end with 'end'" << std::endl;
 	while (std::cin >> attribute) {
 		if (attribute == "end") {
@@ -212,7 +248,8 @@ int main(int argc, char *argv[]) {
 		materialize_keys.push_back(attribute);
 	}
 	unordered_map<std::string, int> from_pipeline;
-	auto possible_mat_options = find_materialize_position(materialize_keys, from_pipeline);
+	std::vector<std::string> table_name_sets;
+	auto possible_mat_options = find_materialize_position(materialize_keys, from_pipeline, table_name_sets);
 	for (auto &[attr, pipeline_ids] : possible_mat_options) {
 		std::cout << attr << ": ";
 		for (auto &pipeline_id : pipeline_ids) {
@@ -220,6 +257,12 @@ int main(int argc, char *argv[]) {
 		}
 		std::cout << std::endl;
 	}
+	//! rewrite the select keys
+	for (auto &table_name : table_name_sets) {
+		select_keys += "," + table_name + ".rowid ";
+	}
+	query = select_keys + left_query;
+	std::cout << select_keys << std::endl;
 	std::cout << "Please input the materialize position for each key" << std::endl;
 
 	std::unordered_map<int, std::vector<std::string>> materialize_pos;
