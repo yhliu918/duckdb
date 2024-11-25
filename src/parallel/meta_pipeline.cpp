@@ -106,8 +106,9 @@ int MetaPipeline::Readynew(int pipe_id, int parent_pipe_id) {
 		pipelines[i]->pipeline_id = pipe_id++;
 		pipelines[i]->parent = parent_pipe_id;
 	}
+	int this_parent_id = pipe_id - 1;
 	for (auto &child : children) {
-		int result_pipeid = child->Readynew(pipe_id, pipe_id - 1);
+		int result_pipeid = child->Readynew(pipe_id, this_parent_id);
 		pipe_id = result_pipeid;
 	}
 	return pipe_id;
