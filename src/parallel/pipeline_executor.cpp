@@ -27,13 +27,14 @@ double getNow() {
 	gettimeofday(&tv, NULL);
 	return tv.tv_sec * 1000.0 + tv.tv_usec / 1000.0;
 }
-void PipelineExecutor::parse_materialize_config(Pipeline &pipeline_p, bool read_mat_info) {
+bool PipelineExecutor::parse_materialize_config(Pipeline &pipeline_p, bool read_mat_info) {
 	std::ifstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/pipeline" +
 	                       std::to_string(pipeline_p.pipeline_id),
 	                   std::ios::in);
+	int materialize_strategy_mode = 0;
 	if (file.is_open()) {
 		// basic config
-		int materialize_strategy_mode;
+
 		bool push_source;
 		int chunk_queue_threshold;
 
@@ -82,6 +83,7 @@ void PipelineExecutor::parse_materialize_config(Pipeline &pipeline_p, bool read_
 		}
 		file.close();
 	}
+	return materialize_strategy_mode;
 }
 void PipelineExecutor::dump_pipeline_info(Pipeline &pipeline_p) {
 	std::unordered_set<std::string> must_enable_columns_when_start;
@@ -159,7 +161,7 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 
 		std::cout << pipeline.pipeline_id << " " << pipeline.parent << " " << pipeline.ToString() << std::endl;
 	}
-	parse_materialize_config(pipeline, false);
+	bool mat_mode = parse_materialize_config(pipeline, false);
 	if (pipeline.sink) {
 		local_sink_state = pipeline.sink->GetLocalSinkState(context);
 		requires_batch_index = pipeline.sink->RequiresBatchIndex() && pipeline.source->SupportsBatchIndex();
@@ -172,7 +174,9 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 		}
 		if (pipeline.sink->type == PhysicalOperatorType::HASH_JOIN ||
 		    pipeline.sink->type == PhysicalOperatorType::RESULT_COLLECTOR) {
-			std::ifstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/config_num", std::ios::in);
+			std::ifstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/pipeline_dop" +
+			                       std::to_string(pipeline.pipeline_id),
+			                   std::ios::in);
 			if (file.is_open()) {
 				file >> num;
 				file.close();
@@ -189,6 +193,10 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 		for (idx_t i = 0; i < pipeline.operators.size() + 1; i++) {
 			pipeline.operator_total_time.push_back(0);
 		}
+	}
+	if (!pipeline.config_parsed) {
+		parse_materialize_config(pipeline, true);
+		pipeline.config_parsed = true;
 	}
 	pipeline.mat_lock.unlock();
 
@@ -213,7 +221,6 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 							                              move(source.second.materialize_local_source_state));
 						}
 					}
-					parse_materialize_config(pipeline, true);
 				}
 			}
 			pipeline.mat_lock.unlock();
@@ -230,7 +237,7 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 		// 	std::cout << std::endl;
 		// }
 		chunk->Initialize(Allocator::Get(context.client), prev_operator.GetTypes());
-		chunk->disable_columns = std::move(prev_operator.disable_columns);
+		chunk->disable_columns = prev_operator.disable_columns;
 
 		intermediate_chunks.push_back(std::move(chunk));
 
@@ -538,8 +545,8 @@ void PipelineExecutor::FlushQueuedChunks() {
 			}
 			mat_result_write_back[result_col_index] = write_col_idx;
 		}
-
 		auto &mat_source = pipeline.materialize_sources[mat_map.source_pipeline_id];
+
 		OperatorSourceInput source_input = {*mat_source.materialize_source_state,
 		                                    *mat_source.materialize_local_source_state,
 		                                    interrupt_state,
@@ -1002,7 +1009,7 @@ void PipelineExecutor::InitializeChunk(DataChunk &chunk) {
 	// }
 
 	chunk.Initialize(Allocator::DefaultAllocator(), types);
-	chunk.disable_columns = std::move(last_op.disable_columns);
+	chunk.disable_columns = last_op.disable_columns;
 }
 
 void PipelineExecutor::StartOperator(PhysicalOperator &op) {

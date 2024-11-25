@@ -126,6 +126,11 @@ bool Pipeline::ScheduleParallel(shared_ptr<Event> &event) {
 	if (max_threads > active_threads) {
 		max_threads = active_threads;
 	}
+	std::ofstream out("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/pipeline_dop" +
+	                      std::to_string(this->pipeline_id),
+	                  std::ios::out);
+	out << max_threads << std::endl;
+	out.close();
 	return LaunchScanTasks(event, max_threads);
 }
 
@@ -191,47 +196,6 @@ void Pipeline::ResetSink() {
 		}
 		lock_guard<mutex> guard(sink->lock);
 		if (!sink->sink_state) {
-			// if (sink->type == PhysicalOperatorType::HASH_JOIN) {
-			// 	vector<int8_t> total_mat_col_types;
-			// 	unordered_map<int, bool> rowid_col_keep;
-			// 	// read config file, we need the final output type list
-			// 	std::ifstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/pipeline" +
-			// 	                       std::to_string(pipeline_id),
-			// 	                   std::ios::in);
-			// 	if (file.is_open()) {
-			// 		// basic config
-			// 		int materialize_strategy_mode;
-			// 		bool push_source;
-			// 		int chunk_queue_threshold;
-			// 		file >> materialize_strategy_mode >> push_source >> chunk_queue_threshold;
-			// 		// materialize info
-
-			// 		int groups_of_info;
-			// 		file >> groups_of_info;
-			// 		for (int i = 0; i < groups_of_info; i++) {
-			// 			int rowid_col_idx;
-			// 			int keep_rowid;
-			// 			idx_t table_col_idx;
-			// 			idx_t result_col_idx;
-			// 			int dependent_pipeline;
-			// 			int logical_type;
-			// 			int string_length = 0;
-			// 			int lines = 0;
-			// 			file >> dependent_pipeline >> keep_rowid >> rowid_col_idx >> lines;
-			// 			rowid_col_keep[rowid_col_idx] = keep_rowid;
-			// 			for (int j = 0; j < lines; j++) {
-			// 				file >> table_col_idx >> result_col_idx >> logical_type;
-			// 				total_mat_col_types.push_back(logical_type);
-			// 				if (LogicalTypeId(logical_type) == LogicalTypeId::VARCHAR) {
-			// 					file >> string_length;
-			// 				}
-			// 			}
-			// 		}
-			// 		file.close();
-			// 	}
-			// 	sink->Cast<PhysicalHashJoin>().total_mat_col_types = total_mat_col_types;
-			// 	sink->Cast<PhysicalHashJoin>().rowid_col_keep = rowid_col_keep;
-			// }
 			sink->sink_state = sink->GetGlobalSinkState(GetClientContext());
 		}
 	}

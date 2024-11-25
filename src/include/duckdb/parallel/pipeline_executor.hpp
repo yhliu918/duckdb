@@ -129,7 +129,7 @@ private:
 	bool should_flush_current_idx = true;
 
 private:
-	void parse_materialize_config(Pipeline &pipeline_p, bool read_mat_info = false);
+	bool parse_materialize_config(Pipeline &pipeline_p, bool read_mat_info = false);
 	void dump_pipeline_info(Pipeline &pipeline_p);
 	void StartOperator(PhysicalOperator &op);
 	void EndOperator(PhysicalOperator &op, optional_ptr<DataChunk> chunk);

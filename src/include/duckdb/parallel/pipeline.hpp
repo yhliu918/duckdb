@@ -173,6 +173,7 @@ public:
 	bool materialize_flag = false;
 	std::mutex mat_lock;
 	std::vector<int> operator_state_set;
+	bool config_parsed = false;
 	int thread_num;
 	void incrementOperatorTime(double time, int op_idx) {
 		operator_total_time[op_idx] += time;
