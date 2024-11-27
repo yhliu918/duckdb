@@ -3,6 +3,7 @@
 #include "duckdb/catalog/catalog_entry/scalar_function_catalog_entry.hpp"
 #include "duckdb/common/types/column/column_data_collection.hpp"
 #include "duckdb/execution/column_binding_resolver.hpp"
+#include "duckdb/execution/operator/filter/physical_filter.hpp"
 #include "duckdb/execution/operator/helper/physical_verify_vector.hpp"
 #include "duckdb/execution/operator/join/physical_hash_join.hpp"
 #include "duckdb/execution/operator/projection/physical_projection.hpp"
@@ -288,7 +289,7 @@ std::string PhysicalPlanGenerator::PrintOperator(const unique_ptr<PhysicalOperat
 		int i = 0;
 		for (auto &type : plan->types) {
 			op_str += "(" + std::to_string(i) + ", " + type.ToString() + ", " +
-			          std::to_string(plan->disable_columns[i]) + ")\n";
+			          std::to_string(plan->disable_columns[i]) + " ," + plan->names[i] + ")\n";
 			i++;
 		}
 		break;
@@ -297,7 +298,7 @@ std::string PhysicalPlanGenerator::PrintOperator(const unique_ptr<PhysicalOperat
 		int i = 0;
 		for (auto &type : plan->types) {
 			op_str += "(" + std::to_string(i) + ", " + type.ToString() + ", " +
-			          std::to_string(plan->disable_columns[i]) + ")\n";
+			          std::to_string(plan->disable_columns[i]) + " ," + plan->names[i] + ")\n";
 			i++;
 		}
 		break;
@@ -307,16 +308,16 @@ std::string PhysicalPlanGenerator::PrintOperator(const unique_ptr<PhysicalOperat
 		int i = 0;
 		for (auto &type : plan->types) {
 			op_str += "(" + std::to_string(i) + ", " + type.ToString() + ", " +
-			          std::to_string(plan->disable_columns[i]) + ")\n";
+			          std::to_string(plan->disable_columns[i]) + " ," + plan->names[i] + ")\n";
 			i++;
 		}
-		for (int i = 0; i < plan->types.size(); i++) {
-			if (i < plan->children[0]->types.size()) {
-				op_str += "(" + std::to_string(i) + ", 0" + ")\n";
-			} else {
-				op_str += "(" + std::to_string(i) + ", 1" + ")\n";
-			}
-		}
+		// for (int i = 0; i < plan->types.size(); i++) {
+		// 	if (i < plan->children[0]->types.size()) {
+		// 		op_str += "(" + std::to_string(i) + ", 0" + ")\n";
+		// 	} else {
+		// 		op_str += "(" + std::to_string(i) + ", 1" + ")\n";
+		// 	}
+		// }
 		break;
 	}
 	default:
@@ -337,6 +338,12 @@ std::vector<std::string> PhysicalPlanGenerator::PrintOperatorCatalog(const uniqu
 				op_str.push_back(op_str_child[bound_ref.index]);
 			}
 		}
+		break;
+	}
+	case PhysicalOperatorType::FILTER: {
+		auto &filter = plan->Cast<PhysicalFilter>();
+		std::vector<std::string> op_str_child = PrintOperatorCatalog(filter.children[0]);
+		op_str = op_str_child;
 		break;
 	}
 	case PhysicalOperatorType::TABLE_SCAN: {
@@ -366,13 +373,6 @@ std::vector<std::string> PhysicalPlanGenerator::PrintOperatorCatalog(const uniqu
 		std::vector<std::string> op_str_child_right = PrintOperatorCatalog(hash_join.children[1]);
 		// join keys
 		op_str = op_str_child_left;
-		// right join keys
-		vector<int> right_join_keys;
-		for (int i = 0; i < hash_join.condition_types.size(); i++) {
-			int right_idx = hash_join.conditions[i].right->Cast<BoundReferenceExpression>().index;
-			right_join_keys.push_back(right_idx);
-			op_str.push_back(op_str_child_right[right_idx]);
-		}
 		if (plan->must_enables_left.size() == 0) {
 			for (int i = 0; i < hash_join.condition_types.size(); i++) {
 				int left_idx = hash_join.conditions[i].left->Cast<BoundReferenceExpression>().index;
@@ -386,24 +386,30 @@ std::vector<std::string> PhysicalPlanGenerator::PrintOperatorCatalog(const uniqu
 			}
 		}
 		// payload columns
-		// if right child has disabled columns, return all columns
-		bool right_has_disabled = false;
-		for (int i = 0; i < hash_join.children[1]->output_disable_columns.size(); i++) {
-			if (hash_join.children[1]->output_disable_columns[i] == 1) {
-				right_has_disabled = true;
-				break;
-			}
-		}
-		if (right_has_disabled) {
-			for (int i = 0; i < hash_join.payload_column_idxs_total.size(); i++) {
-				op_str.push_back(op_str_child_right[hash_join.payload_column_idxs_total[i]]);
-			}
-		} else {
-			for (int i = 0; i < hash_join.payload_column_idxs.size(); i++) {
-				op_str.push_back(op_str_child_right[hash_join.payload_column_idxs[i]]);
-			}
+		for (int i = 0; i < hash_join.payload_column_idxs_total.size(); i++) {
+			op_str.push_back(op_str_child_right[hash_join.payload_column_idxs_total[i]]);
 		}
 		break;
+		// right join keys
+		// vector<std::string> right_join_keys;
+		// for (int i = 0; i < hash_join.condition_types.size(); i++) {
+		// 	int right_idx = hash_join.conditions[i].right->Cast<BoundReferenceExpression>().index;
+		// 	right_join_keys.push_back(op_str_child_right[right_idx]);
+		// 	// op_str.push_back(op_str_child_right[right_idx]);
+		// }
+		// if (right_has_disabled) {
+		// 	for (int i = 0; i < hash_join.payload_column_idxs_total.size(); i++) {
+		// 		right_join_keys.push_back(op_str_child_right[hash_join.payload_column_idxs_total[i]]);
+		// 	}
+		// } else {
+		// 	for (int i = 0; i < hash_join.payload_column_idxs.size(); i++) {
+		// 		right_join_keys.push_back(op_str_child_right[hash_join.payload_column_idxs[i]]);
+		// 	}
+		// }
+		// for (int i = 0; i < hash_join.rhs_output_columns.size(); i++) {
+		// 	op_str.push_back(right_join_keys[hash_join.rhs_output_columns[i]]);
+		// }
+		// break;
 	}
 	default:
 		break;

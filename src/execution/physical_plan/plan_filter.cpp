@@ -13,10 +13,13 @@ namespace duckdb {
 unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalFilter &op) {
 	D_ASSERT(op.children.size() == 1);
 	unique_ptr<PhysicalOperator> plan = CreatePlan(*op.children[0]);
+	vector<int> disable_column;
 	if (!op.expressions.empty()) {
 		D_ASSERT(plan->types.size() > 0);
 		// create a filter if there is anything to filter
 		auto filter = make_uniq<PhysicalFilter>(plan->types, std::move(op.expressions), op.estimated_cardinality);
+		filter->disable_columns = plan->disable_columns;
+		filter->output_disable_columns = filter->disable_columns;
 		filter->children.push_back(std::move(plan));
 		plan = std::move(filter);
 	}
@@ -25,8 +28,11 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalFilter &op
 		vector<unique_ptr<Expression>> select_list;
 		for (idx_t i = 0; i < op.projection_map.size(); i++) {
 			select_list.push_back(make_uniq<BoundReferenceExpression>(op.types[i], op.projection_map[i]));
+			disable_column.push_back(plan->disable_columns[op.projection_map[i]]);
 		}
 		auto proj = make_uniq<PhysicalProjection>(op.types, std::move(select_list), op.estimated_cardinality);
+		proj->disable_columns = std::move(disable_column);
+		proj->output_disable_columns = proj->disable_columns;
 		proj->children.push_back(std::move(plan));
 		plan = std::move(proj);
 	}

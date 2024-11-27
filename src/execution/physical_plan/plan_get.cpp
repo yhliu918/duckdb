@@ -235,21 +235,33 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalGet &op) {
 			}
 			vector<column_t> column_ids_new;
 			vector<idx_t> projection_ids_old = op.projection_ids;
+			std::vector<int> column_project_bit_map;
+			for (int i = 0; i < column_ids.size(); i++) {
+				column_project_bit_map.push_back(0);
+			}
+			for (auto &i : op.projection_ids) {
+				column_project_bit_map[i] = 1;
+			}
+
+			vector<int> erase_set;
 			// op.types.clear();
 			for (int i = 0; i < column_ids.size(); i++) {
 				if (std::find(del_column.begin(), del_column.end(), column_ids[i]) == del_column.end()) {
 					column_ids_new.push_back(column_ids[i]);
 				} else {
-					for (int j = 0; j < op.projection_ids.size(); j++) {
-						if (op.projection_ids[j] == i) {
-							op.projection_ids.erase(op.projection_ids.begin() + j);
-							for (int k = 0; k < op.projection_ids.size(); k++) {
-								if (op.projection_ids[k] > i) {
-									op.projection_ids[k]--;
-								}
-							}
-							break;
-						}
+					erase_set.push_back(i);
+				}
+			}
+			vector<idx_t> projection_ids_new;
+			int project_idx = 0;
+			for (int i = 0; i < column_project_bit_map.size(); i++) {
+				bool find = std::find(erase_set.begin(), erase_set.end(), i) != erase_set.end();
+				if (!find) {
+					if (column_project_bit_map[i] == 1) {
+						projection_ids_new.push_back(project_idx);
+						project_idx++;
+					} else {
+						project_idx++;
 					}
 				}
 			}
@@ -260,7 +272,7 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalGet &op) {
 			auto node = make_uniq<PhysicalTableScan>(op.types, op.function, std::move(op.bind_data), op.returned_types,
 			                                         column_ids, projection_ids_old, op.names, std::move(table_filters),
 			                                         op.estimated_cardinality, op.extra_info, std::move(op.parameters),
-			                                         table_name, std::move(disable_column), op.projection_ids);
+			                                         table_name, std::move(disable_column), projection_ids_new);
 			// node->disable_columns = std::move(disable_column);
 
 			node->dynamic_filters = op.dynamic_filters;

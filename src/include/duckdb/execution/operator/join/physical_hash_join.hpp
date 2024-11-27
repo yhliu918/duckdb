@@ -105,6 +105,7 @@ public:
 
 	//! Positions of the RHS columns that need to output
 	vector<idx_t> rhs_output_columns;
+	vector<idx_t> rhs_output_columns_total;
 	//! The types of the output
 	vector<LogicalType> rhs_output_types;
 

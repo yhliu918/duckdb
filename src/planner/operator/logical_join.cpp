@@ -48,14 +48,6 @@ void LogicalJoin::ResolveTypes() {
 		return;
 	}
 	types.insert(types.end(), right_types.begin(), right_types.end());
-	for (auto &[col, keep] : col_rowid_keep) {
-		if (!keep) {
-			types.erase(types.begin() + col);
-		}
-	}
-	for (auto &type : mat_type) {
-		types.push_back(LogicalType(LogicalTypeId(type)));
-	}
 }
 
 void LogicalJoin::GetTableReferences(LogicalOperator &op, unordered_set<idx_t> &bindings) {

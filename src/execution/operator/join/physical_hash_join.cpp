@@ -90,6 +90,7 @@ PhysicalHashJoin::PhysicalHashJoin(LogicalOperator &op, unique_ptr<PhysicalOpera
 		} else {
 			// This rhs column is a join key
 			rhs_output_columns.push_back(it->second);
+			payload_column_idxs_total.push_back(it->second);
 		}
 		rhs_output_types.push_back(rhs_col_type);
 		this->disable_columns.push_back(0);
@@ -169,8 +170,8 @@ public:
 	unique_ptr<JoinFilterLocalState> local_filter_state;
 	bool set_output = false;
 	vector<idx_t> payload_column_idxs_new;
-	DataChunk payload_chunk_new;
-	vector<LogicalType> payload_types_new;
+	// DataChunk payload_chunk_new;
+	// vector<LogicalType> payload_types_new;
 };
 
 HashJoinGlobalSinkState::HashJoinGlobalSinkState(const PhysicalHashJoin &op_p, ClientContext &context_p)
@@ -268,23 +269,6 @@ void JoinFilterPushdownInfo::Sink(DataChunk &chunk, JoinFilterLocalState &lstate
 
 SinkResultType PhysicalHashJoin::Sink(ExecutionContext &context, DataChunk &chunk, OperatorSinkInput &input) const {
 	auto &lstate = input.local_state.Cast<HashJoinLocalSinkState>();
-	if (!lstate.set_output) {
-		for (auto &idx : payload_column_idxs) {
-			if (input.colid_keep_rowid.find(idx) != input.colid_keep_rowid.end() && !input.colid_keep_rowid[idx]) {
-				continue;
-			} else {
-				lstate.payload_column_idxs_new.push_back(idx);
-				lstate.payload_types_new.push_back(chunk.data[idx].GetType());
-			}
-		}
-
-		for (auto &[idx, type] : input.materialize_column_types) {
-			lstate.payload_column_idxs_new.push_back(idx);
-			lstate.payload_types_new.push_back(LogicalType(LogicalTypeId(type)));
-		}
-		lstate.set_output = true;
-		lstate.payload_chunk_new.Initialize(Allocator::DefaultAllocator(), lstate.payload_types_new);
-	}
 	// resolve the join keys for the right chunk
 	lstate.join_keys.Reset();
 	lstate.join_key_executor.Execute(chunk, lstate.join_keys);

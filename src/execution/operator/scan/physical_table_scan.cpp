@@ -199,6 +199,7 @@ InsertionOrderPreservingMap<string> PhysicalTableScan::ParamsToString() const {
 			result["Projections"] = projections;
 		}
 	}
+
 	if (function.filter_pushdown && table_filters) {
 		string filters_info;
 		bool first_item = true;
