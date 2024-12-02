@@ -546,7 +546,8 @@ void ColumnData::FetchRowNew(TransactionData transaction, ColumnFetchState &stat
 		segment = data.GetSegmentNode_fixed((row_id % STANDARD_ROW_GROUPS_SIZE), row_id, string_size);
 		state.fixed_length = string_size;
 	} else {
-		segment = data.GetSegmentNode(row_id, row_id);
+		segment = data.GetSegment(row_id);
+		// segment = data.GetSegmentNode(row_id, row_id);
 	}
 	// now perform the fetch within the segment
 	segment->FetchRow(state, row_id, result, result_idx);

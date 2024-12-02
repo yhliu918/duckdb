@@ -25,6 +25,7 @@ public:
 
 	//! The filter expression
 	unique_ptr<Expression> expression;
+	vector<idx_t> filter_columns;
 
 public:
 	unique_ptr<OperatorState> GetOperatorState(ExecutionContext &context) const override;

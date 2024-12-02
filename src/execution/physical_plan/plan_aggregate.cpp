@@ -154,8 +154,8 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalAggregate 
 	D_ASSERT(op.children.size() == 1);
 
 	auto plan = CreatePlan(*op.children[0]);
-
 	plan = ExtractAggregateExpressions(std::move(plan), op.expressions, op.groups);
+	plan->names = PrintOperatorCatalog(plan);
 
 	if (op.groups.empty() && op.grouping_sets.size() <= 1) {
 		// no groups, check if we can use a simple aggregation
@@ -172,6 +172,8 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalAggregate 
 		if (use_simple_aggregation) {
 			groupby = make_uniq_base<PhysicalOperator, PhysicalUngroupedAggregate>(op.types, std::move(op.expressions),
 			                                                                       op.estimated_cardinality);
+			groupby->disable_columns = plan->disable_columns;
+			groupby->output_disable_columns = groupby->disable_columns;
 		} else {
 			groupby = make_uniq_base<PhysicalOperator, PhysicalHashAggregate>(
 			    context, op.types, std::move(op.expressions), op.estimated_cardinality);
@@ -236,6 +238,8 @@ PhysicalPlanGenerator::ExtractAggregateExpressions(unique_ptr<PhysicalOperator> 
 	}
 	auto projection =
 	    make_uniq<PhysicalProjection>(std::move(types), std::move(expressions), child->estimated_cardinality);
+	projection->disable_columns = child->disable_columns;
+	projection->output_disable_columns = projection->disable_columns;
 	projection->children.push_back(std::move(child));
 	return std::move(projection);
 }

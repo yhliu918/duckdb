@@ -1,0 +1,564 @@
+{
+    "aka_name": {
+        "rowid(aka_name)": {
+            "col_id": 0,
+            "type": 14
+        },
+        "aka_name.id": {
+            "col_id": 1,
+            "type": 13
+        },
+        "aka_name.person_id": {
+            "col_id": 2,
+            "type": 13
+        },
+        "aka_name.name": {
+            "col_id": 3,
+            "type": 25
+        },
+        "aka_name.imdb_index": {
+            "col_id": 4,
+            "type": 25
+        },
+        "aka_name.name_pcode_cf": {
+            "col_id": 5,
+            "type": 25
+        },
+        "aka_name.name_pcode_nf": {
+            "col_id": 6,
+            "type": 25
+        },
+        "aka_name.surname_pcode": {
+            "col_id": 7,
+            "type": 25
+        },
+        "aka_name.md5sum": {
+            "col_id": 8,
+            "type": 25
+        }
+    },
+    "aka_title": {
+        "rowid(aka_title)": {
+            "col_id": 0,
+            "type": 14
+        },
+        "aka_title.id": {
+            "col_id": 1,
+            "type": 13
+        },
+        "aka_title.movie_id": {
+            "col_id": 2,
+            "type": 13
+        },
+        "aka_title.title": {
+            "col_id": 3,
+            "type": 25
+        },
+        "aka_title.imdb_index": {
+            "col_id": 4,
+            "type": 25
+        },
+        "aka_title.kind_id": {
+            "col_id": 5,
+            "type": 13
+        },
+        "aka_title.production_year": {
+            "col_id": 6,
+            "type": 13
+        },
+        "aka_title.phonetic_code": {
+            "col_id": 7,
+            "type": 25
+        },
+        "aka_title.episode_of_id": {
+            "col_id": 8,
+            "type": 13
+        },
+        "aka_title.season_nr": {
+            "col_id": 9,
+            "type": 13
+        },
+        "aka_title.episode_nr": {
+            "col_id": 10,
+            "type": 13
+        },
+        "aka_title.note": {
+            "col_id": 11,
+            "type": 25
+        },
+        "aka_title.md5sum": {
+            "col_id": 12,
+            "type": 25
+        }
+    },
+    "cast_info": {
+        "rowid(cast_info)": {
+            "col_id": 0,
+            "type": 14
+        },
+        "cast_info.id": {
+            "col_id": 1,
+            "type": 13
+        },
+        "cast_info.person_id": {
+            "col_id": 2,
+            "type": 13
+        },
+        "cast_info.movie_id": {
+            "col_id": 3,
+            "type": 13
+        },
+        "cast_info.person_role_id": {
+            "col_id": 4,
+            "type": 13
+        },
+        "cast_info.note": {
+            "col_id": 5,
+            "type": 25
+        },
+        "cast_info.nr_order": {
+            "col_id": 6,
+            "type": 13
+        },
+        "cast_info.role_id": {
+            "col_id": 7,
+            "type": 13
+        }
+    },
+    "char_name": {
+        "rowid(char_name)": {
+            "col_id": 0,
+            "type": 14
+        },
+        "char_name.id": {
+            "col_id": 1,
+            "type": 13
+        },
+        "char_name.name": {
+            "col_id": 2,
+            "type": 25
+        },
+        "char_name.imdb_index": {
+            "col_id": 3,
+            "type": 25
+        },
+        "char_name.imdb_id": {
+            "col_id": 4,
+            "type": 25
+        },
+        "char_name.name_pcode_nf": {
+            "col_id": 5,
+            "type": 25
+        },
+        "char_name.surname_pcode": {
+            "col_id": 6,
+            "type": 25
+        },
+        "char_name.md5sum": {
+            "col_id": 7,
+            "type": 25
+        }
+    },
+    "comp_cast_type": {
+        "rowid(comp_cast_type)": {
+            "col_id": 0,
+            "type": 14
+        },
+        "comp_cast_type.id": {
+            "col_id": 1,
+            "type": 13
+        },
+        "comp_cast_type.kind": {
+            "col_id": 2,
+            "type": 25
+        }
+    },
+    "company_name": {
+        "rowid(company_name)": {
+            "col_id": 0,
+            "type": 14
+        },
+        "company_name.id": {
+            "col_id": 1,
+            "type": 13
+        },
+        "company_name.name": {
+            "col_id": 2,
+            "type": 25
+        },
+        "company_name.country_code": {
+            "col_id": 3,
+            "type": 25
+        },
+        "company_name.imdb_id": {
+            "col_id": 4,
+            "type": 25
+        },
+        "company_name.name_pcode_nf": {
+            "col_id": 5,
+            "type": 25
+        },
+        "company_name.name_pcode_sf": {
+            "col_id": 6,
+            "type": 25
+        },
+        "company_name.md5sum": {
+            "col_id": 7,
+            "type": 25
+        }
+    },
+    "company_type": {
+        "rowid(company_type)": {
+            "col_id": 0,
+            "type": 14
+        },
+        "company_type.id": {
+            "col_id": 1,
+            "type": 13
+        },
+        "company_type.kind": {
+            "col_id": 2,
+            "type": 25
+        }
+    },
+    "complete_cast": {
+        "rowid(complete_cast)": {
+            "col_id": 0,
+            "type": 14
+        },
+        "complete_cast.id": {
+            "col_id": 1,
+            "type": 13
+        },
+        "complete_cast.movie_id": {
+            "col_id": 2,
+            "type": 13
+        },
+        "complete_cast.subject_id": {
+            "col_id": 3,
+            "type": 13
+        },
+        "complete_cast.status_id": {
+            "col_id": 4,
+            "type": 13
+        }
+    },
+    "info_type": {
+        "rowid(info_type)": {
+            "col_id": 0,
+            "type": 14
+        },
+        "info_type.id": {
+            "col_id": 1,
+            "type": 13
+        },
+        "info_type.info": {
+            "col_id": 2,
+            "type": 25
+        }
+    },
+    "keyword": {
+        "rowid(keyword)": {
+            "col_id": 0,
+            "type": 14
+        },
+        "keyword.id": {
+            "col_id": 1,
+            "type": 13
+        },
+        "keyword.keyword": {
+            "col_id": 2,
+            "type": 25
+        },
+        "keyword.phonetic_code": {
+            "col_id": 3,
+            "type": 25
+        }
+    },
+    "kind_type": {
+        "rowid(kind_type)": {
+            "col_id": 0,
+            "type": 14
+        },
+        "kind_type.id": {
+            "col_id": 1,
+            "type": 13
+        },
+        "kind_type.kind": {
+            "col_id": 2,
+            "type": 25
+        }
+    },
+    "link_type": {
+        "rowid(link_type)": {
+            "col_id": 0,
+            "type": 14
+        },
+        "link_type.id": {
+            "col_id": 1,
+            "type": 13
+        },
+        "link_type.link": {
+            "col_id": 2,
+            "type": 25
+        }
+    },
+    "movie_companies": {
+        "rowid(movie_companies)": {
+            "col_id": 0,
+            "type": 14
+        },
+        "movie_companies.id": {
+            "col_id": 1,
+            "type": 13
+        },
+        "movie_companies.movie_id": {
+            "col_id": 2,
+            "type": 13
+        },
+        "movie_companies.company_id": {
+            "col_id": 3,
+            "type": 13
+        },
+        "movie_companies.company_type_id": {
+            "col_id": 4,
+            "type": 13
+        },
+        "movie_companies.note": {
+            "col_id": 5,
+            "type": 25
+        }
+    },
+    "movie_info": {
+        "rowid(movie_info)": {
+            "col_id": 0,
+            "type": 14
+        },
+        "movie_info.id": {
+            "col_id": 1,
+            "type": 13
+        },
+        "movie_info.movie_id": {
+            "col_id": 2,
+            "type": 13
+        },
+        "movie_info.info_type_id": {
+            "col_id": 3,
+            "type": 13
+        },
+        "movie_info.info": {
+            "col_id": 4,
+            "type": 25
+        },
+        "movie_info.note": {
+            "col_id": 5,
+            "type": 25
+        }
+    },
+    "movie_info_idx": {
+        "rowid(movie_info_idx)": {
+            "col_id": 0,
+            "type": 14
+        },
+        "movie_info_idx.id": {
+            "col_id": 1,
+            "type": 13
+        },
+        "movie_info_idx.movie_id": {
+            "col_id": 2,
+            "type": 13
+        },
+        "movie_info_idx.info_type_id": {
+            "col_id": 3,
+            "type": 13
+        },
+        "movie_info_idx.info": {
+            "col_id": 4,
+            "type": 25
+        },
+        "movie_info_idx.note": {
+            "col_id": 5,
+            "type": 25
+        }
+    },
+    "movie_keyword": {
+        "rowid(movie_keyword)": {
+            "col_id": 0,
+            "type": 14
+        },
+        "movie_keyword.id": {
+            "col_id": 1,
+            "type": 13
+        },
+        "movie_keyword.movie_id": {
+            "col_id": 2,
+            "type": 13
+        },
+        "movie_keyword.keyword_id": {
+            "col_id": 3,
+            "type": 13
+        }
+    },
+    "movie_link": {
+        "rowid(movie_link)": {
+            "col_id": 0,
+            "type": 14
+        },
+        "movie_link.id": {
+            "col_id": 1,
+            "type": 13
+        },
+        "movie_link.movie_id": {
+            "col_id": 2,
+            "type": 13
+        },
+        "movie_link.linked_movie_id": {
+            "col_id": 3,
+            "type": 13
+        },
+        "movie_link.link_type_id": {
+            "col_id": 4,
+            "type": 13
+        }
+    },
+    "name": {
+        "rowid(name)": {
+            "col_id": 0,
+            "type": 14
+        },
+        "name.id": {
+            "col_id": 1,
+            "type": 13
+        },
+        "name.name": {
+            "col_id": 2,
+            "type": 25
+        },
+        "name.imdb_index": {
+            "col_id": 3,
+            "type": 25
+        },
+        "name.imdb_id": {
+            "col_id": 4,
+            "type": 25
+        },
+        "name.gender": {
+            "col_id": 5,
+            "type": 25
+        },
+        "name.name_pcode_cf": {
+            "col_id": 6,
+            "type": 25
+        },
+        "name.name_pcode_nf": {
+            "col_id": 7,
+            "type": 25
+        },
+        "name.surname_pcode": {
+            "col_id": 8,
+            "type": 25
+        },
+        "name.md5sum": {
+            "col_id": 9,
+            "type": 25
+        }
+    },
+    "person_info": {
+        "rowid(person_info)": {
+            "col_id": 0,
+            "type": 14
+        },
+        "person_info.id": {
+            "col_id": 1,
+            "type": 13
+        },
+        "person_info.person_id": {
+            "col_id": 2,
+            "type": 13
+        },
+        "person_info.info_type_id": {
+            "col_id": 3,
+            "type": 13
+        },
+        "person_info.info": {
+            "col_id": 4,
+            "type": 25
+        },
+        "person_info.note": {
+            "col_id": 5,
+            "type": 25
+        }
+    },
+    "role_type": {
+        "rowid(role_type)": {
+            "col_id": 0,
+            "type": 14
+        },
+        "role_type.id": {
+            "col_id": 1,
+            "type": 13
+        },
+        "role_type.role": {
+            "col_id": 2,
+            "type": 25
+        }
+    },
+    "title": {
+        "rowid(title)": {
+            "col_id": 0,
+            "type": 14
+        },
+        "title.id": {
+            "col_id": 1,
+            "type": 13
+        },
+        "title.title": {
+            "col_id": 2,
+            "type": 25
+        },
+        "title.imdb_index": {
+            "col_id": 3,
+            "type": 25
+        },
+        "title.kind_id": {
+            "col_id": 4,
+            "type": 13
+        },
+        "title.production_year": {
+            "col_id": 5,
+            "type": 13
+        },
+        "title.imdb_id": {
+            "col_id": 6,
+            "type": 25
+        },
+        "title.phonetic_code": {
+            "col_id": 7,
+            "type": 25
+        },
+        "title.episode_of_id": {
+            "col_id": 8,
+            "type": 13
+        },
+        "title.season_nr": {
+            "col_id": 9,
+            "type": 13
+        },
+        "title.episode_nr": {
+            "col_id": 10,
+            "type": 13
+        },
+        "title.series_years": {
+            "col_id": 11,
+            "type": 25
+        },
+        "title.md5sum": {
+            "col_id": 12,
+            "type": 25
+        },
+        "title.rowid_dup": {
+            "col_id": 13,
+            "type": 13
+        }
+    }
+}

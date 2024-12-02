@@ -102,6 +102,9 @@ void PipelineExecutor::dump_pipeline_info(Pipeline &pipeline_p) {
 				                                    op.get().must_enables_right.end());
 			}
 		}
+		if (op.get().type == PhysicalOperatorType::FILTER) {
+			must_enable_columns_when_start.insert(op.get().must_enables_left.begin(), op.get().must_enables_left.end());
+		}
 		int operator_index = 0;
 		if (op.get().operator_index) {
 			operator_index = op.get().operator_index;
@@ -545,22 +548,41 @@ void PipelineExecutor::FlushQueuedChunks() {
 			}
 			mat_result_write_back[result_col_index] = write_col_idx;
 		}
-		auto &mat_source = pipeline.materialize_sources[mat_map.source_pipeline_id];
+		if (mat_map.source_pipeline_id == pipeline.pipeline_id) {
+			OperatorSourceInput source_input = {*pipeline.source_state,
+			                                    *local_source_state,
+			                                    interrupt_state,
+			                                    true,
+			                                    rowid_col_idx,
+			                                    materialize_column_ids_new,
+			                                    fixed_len_strings_columns_new,
+			                                    true,
+			                                    nullptr,
+			                                    &inverted_indexnew[rowid_col_idx]};
 
-		OperatorSourceInput source_input = {*mat_source.materialize_source_state,
-		                                    *mat_source.materialize_local_source_state,
-		                                    interrupt_state,
-		                                    true,
-		                                    rowid_col_idx,
-		                                    materialize_column_ids_new,
-		                                    fixed_len_strings_columns_new,
-		                                    true,
-		                                    nullptr,
-		                                    &inverted_indexnew[rowid_col_idx]};
+			auto res = pipeline.source->GetData(context, mat_chunk, source_input);
+		} else {
+			auto &mat_source = pipeline.materialize_sources[mat_map.source_pipeline_id];
 
-		auto res = mat_source.materialize_source->GetData(context, mat_chunk, source_input);
+			OperatorSourceInput source_input = {*mat_source.materialize_source_state,
+			                                    *mat_source.materialize_local_source_state,
+			                                    interrupt_state,
+			                                    true,
+			                                    rowid_col_idx,
+			                                    materialize_column_ids_new,
+			                                    fixed_len_strings_columns_new,
+			                                    true,
+			                                    nullptr,
+			                                    &inverted_indexnew[rowid_col_idx]};
+
+			auto res = mat_source.materialize_source->GetData(context, mat_chunk, source_input);
+		}
 	}
 	mat_chunk.SetCardinality(result_index.begin()->second);
+	// int64_t *val = reinterpret_cast<int64_t *>(mat_chunk.data[0].GetData());
+	// for (int i = 0; i < mat_chunk.size(); i++) {
+	// 	std::cout << val[i] << " ";
+	// }
 
 	// slice the mat_chunk into these chunks
 	int start = 0;
@@ -617,6 +639,8 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 						int &index = result_index[rowid_col_idx];
 						for (int64_t i = 0; i < sink_chunk.size(); i++) {
 							auto rowid = sel[i];
+							// std::cout << rowid << " " << rowid / STANDARD_ROW_GROUPS_SIZE << " " << index <<
+							// std::endl;
 							inverted_indexnew[rowid_col_idx][rowid / STANDARD_ROW_GROUPS_SIZE].emplace_back(
 							    std::make_pair(rowid, index++));
 						}
@@ -639,7 +663,9 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 				double materialize_start = getNow();
 
 				// materialize the inverted index columns
-				FlushQueuedChunks();
+				if (result_index.begin()->second > 0) {
+					FlushQueuedChunks();
+				}
 				double materialize_end = getNow();
 				pipeline.mat_operator_time += materialize_end - materialize_start;
 
@@ -657,6 +683,7 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 							sink_input.colid_keep_rowid[rowid] = mat_map.keep_rowid;
 						}
 					}
+					// std::cout << chunk->size() << std::endl;
 					double sink_start = getNow();
 					sink_result = Sink(*chunk, sink_input);
 					double sink_end = getNow();
@@ -677,6 +704,12 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 
 			if (!pipeline.materialize_flag || pipeline.materialize_strategy_mode != 1) {
 				double sink_start = getNow();
+				// if (pipeline.pipeline_id == 2) {
+				// 	int64_t *val = reinterpret_cast<int64_t *>(sink_chunk.data[2].GetData());
+				// 	for (int i = 0; i < sink_chunk.size(); i++) {
+				// 		std::cout << val[i] << " ";
+				// 	}
+				// }
 				sink_result = Sink(sink_chunk, sink_input);
 				double sink_end = getNow();
 				pipeline.incrementOperatorTime(sink_end - sink_start, pipeline.operators.size());
@@ -706,7 +739,9 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 		double materialize_start = getNow();
 
 		// materialize the inverted index columns
-		FlushQueuedChunks();
+		if (result_index.begin()->second > 0) {
+			FlushQueuedChunks();
+		}
 		double materialize_end = getNow();
 		pipeline.mat_operator_time += materialize_end - materialize_start;
 
@@ -724,6 +759,7 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 					sink_input.colid_keep_rowid[rowid] = mat_map.keep_rowid;
 				}
 			}
+			// std::cout << chunk->size() << std::endl;
 			double sink_start = getNow();
 			auto sink_result = Sink(*chunk, sink_input);
 			double sink_end = getNow();

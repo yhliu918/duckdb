@@ -90,7 +90,7 @@ PhysicalHashJoin::PhysicalHashJoin(LogicalOperator &op, unique_ptr<PhysicalOpera
 		} else {
 			// This rhs column is a join key
 			rhs_output_columns.push_back(it->second);
-			payload_column_idxs_total.push_back(it->second);
+			payload_column_idxs_total.push_back(rhs_col);
 		}
 		rhs_output_types.push_back(rhs_col_type);
 		this->disable_columns.push_back(0);

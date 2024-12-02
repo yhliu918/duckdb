@@ -3,6 +3,7 @@
 #include "duckdb/catalog/catalog_entry/scalar_function_catalog_entry.hpp"
 #include "duckdb/common/types/column/column_data_collection.hpp"
 #include "duckdb/execution/column_binding_resolver.hpp"
+#include "duckdb/execution/operator/aggregate/physical_ungrouped_aggregate.hpp"
 #include "duckdb/execution/operator/filter/physical_filter.hpp"
 #include "duckdb/execution/operator/helper/physical_verify_vector.hpp"
 #include "duckdb/execution/operator/join/physical_hash_join.hpp"
@@ -11,6 +12,7 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/config.hpp"
 #include "duckdb/main/query_profiler.hpp"
+#include "duckdb/planner/expression/bound_conjunction_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/operator/list.hpp"
 #include "duckdb/planner/operator/logical_extension_operator.hpp"
@@ -254,18 +256,18 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalOperator &
 		}
 	}
 
-	std::ifstream disable_columns_file;
-	disable_columns_file.open("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/op_dis_" +
-	                              std::to_string(plan->operator_index),
-	                          std::ios::in);
-	if (disable_columns_file.is_open()) {
-		std::string mat_name;
-		while (disable_columns_file >> mat_name) {
-			int mat_col = std::find(plan->names.begin(), plan->names.end(), mat_name) - plan->names.begin();
-			assert(plan->output_disable_columns[mat_col] == 0);
-			plan->output_disable_columns[mat_col] = 1;
-		}
-	}
+	// std::ifstream disable_columns_file;
+	// disable_columns_file.open("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/op_dis_" +
+	//                               std::to_string(plan->operator_index),
+	//                           std::ios::in);
+	// if (disable_columns_file.is_open()) {
+	// 	std::string mat_name;
+	// 	while (disable_columns_file >> mat_name) {
+	// 		int mat_col = std::find(plan->names.begin(), plan->names.end(), mat_name) - plan->names.begin();
+	// 		assert(plan->output_disable_columns[mat_col] == 0);
+	// 		plan->output_disable_columns[mat_col] = 1;
+	// 	}
+	// }
 
 	std::string op_str = PrintOperator(plan);
 	std::cout << op_str << std::endl;
@@ -285,6 +287,16 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalOperator &
 std::string PhysicalPlanGenerator::PrintOperator(const unique_ptr<PhysicalOperator> &plan) {
 	std::string op_str = std::to_string(plan->operator_index) + " " + plan->GetName() + "\n";
 	switch (plan->type) {
+	case PhysicalOperatorType::UNGROUPED_AGGREGATE: {
+		auto &aggregate = plan->Cast<PhysicalUngroupedAggregate>();
+		int i = 0;
+		for (auto &type : plan->types) {
+			op_str += "(" + std::to_string(i) + ", " + type.ToString() + ", " +
+			          std::to_string(plan->disable_columns[i]) + " ," + plan->names[i] + ")\n";
+			i++;
+		}
+		break;
+	}
 	case PhysicalOperatorType::PROJECTION: {
 		int i = 0;
 		for (auto &type : plan->types) {
@@ -329,6 +341,14 @@ std::string PhysicalPlanGenerator::PrintOperator(const unique_ptr<PhysicalOperat
 std::vector<std::string> PhysicalPlanGenerator::PrintOperatorCatalog(const unique_ptr<PhysicalOperator> &plan) {
 	std::vector<std::string> op_str;
 	switch (plan->type) {
+	case PhysicalOperatorType::UNGROUPED_AGGREGATE: {
+		auto &aggregate = plan->Cast<PhysicalUngroupedAggregate>();
+		std::vector<std::string> op_str_child = PrintOperatorCatalog(aggregate.children[0]);
+		for (int i = 0; i < aggregate.aggregates.size(); i++) {
+			op_str.push_back(op_str_child[i]);
+		}
+		break;
+	}
 	case PhysicalOperatorType::PROJECTION: {
 		auto &projection = plan->Cast<PhysicalProjection>();
 		std::vector<std::string> op_str_child = PrintOperatorCatalog(projection.children[0]);
@@ -344,6 +364,11 @@ std::vector<std::string> PhysicalPlanGenerator::PrintOperatorCatalog(const uniqu
 		auto &filter = plan->Cast<PhysicalFilter>();
 		std::vector<std::string> op_str_child = PrintOperatorCatalog(filter.children[0]);
 		op_str = op_str_child;
+		if (plan->must_enables_left.size() == 0) {
+			for (auto idx : filter.filter_columns) {
+				plan->must_enables_left.push_back(op_str_child[idx]);
+			}
+		}
 		break;
 	}
 	case PhysicalOperatorType::TABLE_SCAN: {

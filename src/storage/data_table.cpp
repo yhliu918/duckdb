@@ -268,7 +268,7 @@ void DataTable::InitializeParallelScan(ClientContext &context, ParallelTableScan
 }
 
 bool DataTable::NextParallelScan(ClientContext &context, ParallelTableScanState &state, TableScanState &scan_state) {
-	if (row_groups->NextParallelScan(context, state.scan_state, scan_state.table_state)) {
+	if (row_groups.get()->NextParallelScan(context, state.scan_state, scan_state.table_state)) {
 		return true;
 	}
 	auto &local_storage = LocalStorage::Get(context, db);

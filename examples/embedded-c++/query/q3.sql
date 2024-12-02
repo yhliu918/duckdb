@@ -1,0 +1,1 @@
+select l_orderkey, o_orderdate, o_shippriority, c_comment from customer, orders,lineitem where c_mktsegment = 'MACHINERY' and c_custkey = o_custkey and l_orderkey = o_orderkey and o_orderdate < date '1996-03-15' and l_shipdate > date '1995-09-16' and l_commitdate < l_receiptdate;
