@@ -27,7 +27,7 @@
             "op_index": 3
         }
     ],
-    "parent": 2,
+    "parent": 1,
     "pipeline_id": 3,
     "table": "supplier"
 }

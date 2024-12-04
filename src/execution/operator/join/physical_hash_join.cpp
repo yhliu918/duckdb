@@ -47,6 +47,13 @@ PhysicalHashJoin::PhysicalHashJoin(LogicalOperator &op, unique_ptr<PhysicalOpera
 			build_columns_in_conditions.emplace(condition.right->Cast<BoundReferenceExpression>().index, cond_idx);
 		}
 	}
+	for (int i = 0; i < children[0]->types.size(); i++) {
+		if (children[0]->output_disable_columns.size() && children[0]->output_disable_columns[i]) {
+			this->disable_columns.push_back(1);
+		} else {
+			this->disable_columns.push_back(0);
+		}
+	}
 
 	// For ANTI, SEMI and MARK join, we only need to store the keys, so for these the payload/RHS types are empty
 	if (join_type == JoinType::ANTI || join_type == JoinType::SEMI || join_type == JoinType::MARK) {
@@ -61,13 +68,6 @@ PhysicalHashJoin::PhysicalHashJoin(LogicalOperator &op, unique_ptr<PhysicalOpera
 		right_projection_map_copy.reserve(rhs_input_types.size());
 		for (idx_t i = 0; i < rhs_input_types.size(); i++) {
 			right_projection_map_copy.emplace_back(i);
-		}
-	}
-	for (int i = 0; i < children[0]->types.size(); i++) {
-		if (children[0]->output_disable_columns.size() && children[0]->output_disable_columns[i]) {
-			this->disable_columns.push_back(1);
-		} else {
-			this->disable_columns.push_back(0);
 		}
 	}
 

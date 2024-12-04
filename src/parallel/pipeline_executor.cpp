@@ -117,7 +117,8 @@ void PipelineExecutor::dump_pipeline_info(Pipeline &pipeline_p) {
 		op_index++;
 	}
 	auto sink = pipeline_p.GetSink();
-	if (sink && sink->type == PhysicalOperatorType::RESULT_COLLECTOR) {
+	if (sink && (sink->type == PhysicalOperatorType::RESULT_COLLECTOR ||
+	             sink->type == PhysicalOperatorType::UNGROUPED_AGGREGATE)) {
 		auto &last_op = pipeline_p.operators.empty() ? *pipeline_p.source : pipeline_p.operators.back().get();
 		for (int i = 0; i < last_op.names.size(); i++) {
 			must_enable_columns_when_end.insert(last_op.names[i]);
@@ -634,24 +635,26 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 				// build inverted index
 				for (auto &[rowid_col_idx, mat_map] : pipeline.materialize_maps) {
 					auto sel_vec = sink_chunk.data[rowid_col_idx];
-					if (sink_chunk.data[rowid_col_idx].GetType() == LogicalType::BIGINT) {
-						int64_t *sel = reinterpret_cast<int64_t *>(sel_vec.GetData());
-						int &index = result_index[rowid_col_idx];
-						for (int64_t i = 0; i < sink_chunk.size(); i++) {
-							auto rowid = sel[i];
-							// std::cout << rowid << " " << rowid / STANDARD_ROW_GROUPS_SIZE << " " << index <<
-							// std::endl;
-							inverted_indexnew[rowid_col_idx][rowid / STANDARD_ROW_GROUPS_SIZE].emplace_back(
-							    std::make_pair(rowid, index++));
-						}
-					} else if (sink_chunk.data[rowid_col_idx].GetType() == LogicalType::UINTEGER) {
-						uint32_t *sel = reinterpret_cast<uint32_t *>(sel_vec.GetData());
-						int &index = result_index[rowid_col_idx];
-						for (int64_t i = 0; i < sink_chunk.size(); i++) {
-							auto rowid = sel[i];
-							inverted_indexnew[rowid_col_idx][rowid / STANDARD_ROW_GROUPS_SIZE].emplace_back(
-							    std::make_pair(rowid, index++));
-						}
+					auto buffer = sink_chunk.data[rowid_col_idx].GetBuffer().get();
+
+					SelectionVector *sel_index;
+					bool use_sel_index =
+					    buffer != nullptr && buffer->GetBufferType() == VectorBufferType::DICTIONARY_BUFFER;
+					if (use_sel_index) {
+						DictionaryBuffer *dict_buffer = static_cast<DictionaryBuffer *>(buffer);
+						sel_index = &dict_buffer->GetSelVector();
+					}
+					D_ASSERT(sel_vec.GetType().id() == LogicalTypeId::BIGINT);
+
+					int64_t *sel = reinterpret_cast<int64_t *>(sel_vec.GetData());
+					int &index = result_index[rowid_col_idx];
+					for (int64_t i = 0; i < sink_chunk.size(); i++) {
+						// auto rowid = sel[i];
+						auto rowid = use_sel_index ? sel[sel_index->get_index(i)] : sel[i];
+
+						// std::cout << rowid << std::endl;
+						inverted_indexnew[rowid_col_idx][rowid / STANDARD_ROW_GROUPS_SIZE].emplace_back(
+						    std::make_pair(rowid, index++));
 					}
 				}
 			}
@@ -704,12 +707,6 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 
 			if (!pipeline.materialize_flag || pipeline.materialize_strategy_mode != 1) {
 				double sink_start = getNow();
-				// if (pipeline.pipeline_id == 2) {
-				// 	int64_t *val = reinterpret_cast<int64_t *>(sink_chunk.data[2].GetData());
-				// 	for (int i = 0; i < sink_chunk.size(); i++) {
-				// 		std::cout << val[i] << " ";
-				// 	}
-				// }
 				sink_result = Sink(sink_chunk, sink_input);
 				double sink_end = getNow();
 				pipeline.incrementOperatorTime(sink_end - sink_start, pipeline.operators.size());

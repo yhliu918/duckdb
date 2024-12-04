@@ -24,17 +24,11 @@ double getNow() {
 json schema;
 json plan;
 
-std::unordered_map<std::string, vector<int>>
-find_materialize_position(std::vector<std::string> attribute, std::unordered_map<std::string, int> &from_pipeline,
-                          std::unordered_set<std::string> &table_names) {
-	std::ifstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/query/job_schema.json");
-	file >> schema;
-	file.close();
-	std::string directory = "/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/query/pipeline";
-	std::unordered_map<std::string, bool> correct_mat_key;
-	for (auto &attr : attribute) {
-		correct_mat_key[attr] = false;
+std::unordered_set<std::string> parse_plan(bool dump) {
+	if (dump) {
+		return std::unordered_set<std::string>();
 	}
+	std::string directory = "/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/query/pipeline";
 	int pipeline_id = 1;
 	std::string file_path = directory + std::to_string(pipeline_id) + ".json";
 	while (!file_exists(file_path)) {
@@ -53,10 +47,39 @@ find_materialize_position(std::vector<std::string> attribute, std::unordered_map
 		plan[std::to_string(pipeline_id)] = std::move(j);
 		pipeline_id++;
 	}
+
+	std::unordered_set<std::string> all_attributes;
+	for (json::iterator it = plan.begin(); it != plan.end(); ++it) {
+		if (it.value().contains("must_enable_columns_start")) {
+			auto must_enable_columns_start = it.value()["must_enable_columns_start"].get<std::vector<std::string>>();
+			for (auto &attr : must_enable_columns_start) {
+				all_attributes.insert(attr);
+			}
+		}
+		if (it.value().contains("must_enable_columns_end")) {
+			auto must_enable_columns_end = it.value()["must_enable_columns_end"].get<std::vector<std::string>>();
+			for (auto &attr : must_enable_columns_end) {
+				all_attributes.insert(attr);
+			}
+		}
+	}
+
+	return all_attributes;
+}
+std::unordered_map<std::string, vector<int>>
+find_materialize_position(std::vector<std::string> attribute, std::unordered_map<std::string, int> &from_pipeline,
+                          std::unordered_set<std::string> &table_names) {
+	std::ifstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/query/job_schema.json");
+	file >> schema;
+	file.close();
+	std::unordered_map<std::string, bool> correct_mat_key;
+	for (auto &attr : attribute) {
+		correct_mat_key[attr] = false;
+	}
 	std::unordered_map<std::string, std::string> table_info;
 	std::unordered_map<std::string, vector<int>> possible_mat_pos;
-	// write table info
 
+	// write table info
 	for (json::iterator it = schema.begin(); it != schema.end(); ++it) {
 		std::ofstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/table" + it.key(),
 		                   std::ios::out);
@@ -70,7 +93,7 @@ find_materialize_position(std::vector<std::string> attribute, std::unordered_map
 		}
 	}
 	for (auto &attr : attribute) {
-		if (!correct_mat_key[attr]) {
+		if (!correct_mat_key[attr] && attr != "NULL") {
 			std::cout << "Invalid materialize key: " << attr << std::endl;
 			exit(0);
 		}
@@ -90,9 +113,9 @@ find_materialize_position(std::vector<std::string> attribute, std::unordered_map
 				        ? it.value()["must_enable_columns_end"].get<std::vector<std::string>>()
 				        : std::vector<std::string>();
 				std::string attr_ = attr;
-				if (attr.find(".") != std::string::npos) {
-					attr_ = attr.substr(attr.find(".") + 1);
-				}
+				// if (attr.find(".") != std::string::npos) {
+				// 	attr_ = attr.substr(attr.find(".") + 1);
+				// }
 				if (std::find(must_enable_start_current.begin(), must_enable_start_current.end(), attr_) !=
 				    must_enable_start_current.end()) {
 					//! should be materialized at first of this pipeline
@@ -167,11 +190,12 @@ void write_materialize_config(std::unordered_map<int, std::vector<std::string>> 
 		                   std::ios::out);
 		for (auto &attr : attrs) {
 			from_pipeline_to_attr[from_pipeline[attr]].push_back(attr);
-			if (attr.find(".") != std::string::npos) {
-				file << attr.substr(attr.find(".") + 1) << std::endl;
-			} else {
-				file << attr << std::endl;
-			}
+			// if (attr.find(".") != std::string::npos) {
+			// 	file << attr.substr(attr.find(".") + 1) << std::endl;
+			// } else {
+			// 	file << attr << std::endl;
+			// }
+			file << attr << std::endl;
 			inverted_from_pipeline[from_pipeline[attr]]--;
 		}
 		std::ofstream disable_file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/op_dis_" +
@@ -202,9 +226,9 @@ void write_materialize_config(std::unordered_map<int, std::vector<std::string>> 
 				int colid_in_basetable = schema[table_name][attr]["col_id"];
 				int attri_type = schema[table_name][attr]["type"];
 				std::string attr_name = attr;
-				if (attr.find(".") != std::string::npos) {
-					attr_name = attr.substr(attr.find(".") + 1);
-				}
+				// if (attr.find(".") != std::string::npos) {
+				// 	attr_name = attr.substr(attr.find(".") + 1);
+				// }
 				pipeline_file << attr_name << " " << colid_in_basetable << " " << attri_type;
 				if (attri_type == 25) {
 					//! string type, currently not supporting fixed length string
@@ -266,15 +290,24 @@ int main(int argc, char *argv[]) {
 	}
 
 	std::cout << "Warning: will remove all content files in the config directory first" << std::endl;
-
 	std::string command = "rm " + config_directory + "*";
 	int cmd_result = system(command.c_str());
+
 	std::string query_directory = "/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/query/pipeline";
-	// command = "rm " + query_directory + "*";
-	// cmd_result = system(command.c_str());
+
+	bool dump = false;
+	const char *dump_env = std::getenv("DUMP_PIPELINE_INFO");
+	if (dump_env != nullptr) {
+		int dump_value = std::atoi(dump_env);
+		dump = (dump_value == 1);
+	}
+	if (dump) {
+		command = "rm " + query_directory + "*";
+		cmd_result = system(command.c_str());
+	}
 
 	// DuckDB db(nullptr);
-	DuckDB db("/home/yihao/duckdb/origin/duckdb/release/job_uncomnew.db");
+	DuckDB db("/home/yihao/duckdb/origin/duckdb/release/job_uncomtest.db");
 	Connection con(db);
 	con.Query("SET threads TO " + thread + ";");
 
@@ -288,6 +321,32 @@ int main(int argc, char *argv[]) {
 		include_aggregate = true;
 	}
 	std::string left_query = query.substr(query.find("from"));
+
+	auto all_attributes = parse_plan(dump);
+	std::vector<std::string> all_attributes_unique;
+	// std::cout << "These are attributes involved in this query:" << std::endl;
+	for (auto &attr : all_attributes) {
+		// std::cout << attr << std::endl;
+		all_attributes_unique.push_back(attr);
+	}
+
+	unordered_map<std::string, int> from_pipeline;
+	std::unordered_set<std::string> table_name_sets;
+
+	auto all_possible_pos = find_materialize_position(all_attributes_unique, from_pipeline, table_name_sets);
+	for (auto &[attr, pipeline_ids] : all_possible_pos) {
+		std::cout << attr << ": ";
+		for (auto &pipeline_id : pipeline_ids) {
+			if (pipeline_id == from_pipeline[attr]) {
+				std::cout << pipeline_id << "(same as the source pipeline) ";
+				continue;
+			}
+			std::cout << pipeline_id << " ";
+		}
+		std::cout << std::endl;
+	}
+
+	//! Materialize key selection Phase
 	std::vector<std::string> materialize_keys;
 	std::string attribute;
 	std::cout << "These are current select keys:" << std::endl;
@@ -299,9 +358,8 @@ int main(int argc, char *argv[]) {
 		}
 		materialize_keys.push_back(attribute);
 	}
-	unordered_map<std::string, int> from_pipeline;
-	std::unordered_set<std::string> table_name_sets;
 
+	from_pipeline.clear();
 	std::unordered_map<std::string, vector<int>> possible_mat_options;
 	if (materialize_keys.size() != 0) {
 		possible_mat_options = find_materialize_position(materialize_keys, from_pipeline, table_name_sets);
@@ -318,8 +376,8 @@ int main(int argc, char *argv[]) {
 		}
 		std::cout << std::endl;
 	}
-	std::cout << "Please input the materialize position for each key" << std::endl;
 
+	std::cout << "Please input the materialize position for each key" << std::endl;
 	std::unordered_map<int, std::vector<std::string>> materialize_pos;
 	std::unordered_map<int, bool> push_source;
 	std::unordered_set<std::string> table_names_mat;

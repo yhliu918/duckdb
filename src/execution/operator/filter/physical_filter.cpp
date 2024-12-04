@@ -2,6 +2,7 @@
 
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/parallel/thread_context.hpp"
+#include "duckdb/planner/expression/bound_between_expression.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_conjunction_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
@@ -35,6 +36,11 @@ void parse_filter(vector<idx_t> &filter_columns, Expression &expr) {
 		auto &comparison = (BoundComparisonExpression &)expr;
 		parse_filter(filter_columns, *comparison.left.get());
 		parse_filter(filter_columns, *comparison.right.get());
+	} else if (expr.type == ExpressionType::COMPARE_BETWEEN) {
+		auto &between = (BoundBetweenExpression &)expr;
+		parse_filter(filter_columns, *between.input.get());
+		parse_filter(filter_columns, *between.lower.get());
+		parse_filter(filter_columns, *between.upper.get());
 	}
 }
 PhysicalFilter::PhysicalFilter(vector<LogicalType> types, vector<unique_ptr<Expression>> select_list,

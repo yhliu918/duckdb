@@ -170,6 +170,8 @@ void UncompressedStringStorage::StringFetchRow(ColumnSegment &segment, ColumnFet
 		}
 		return;
 	}
+	// std::string res = std::string(result_string.GetData(), result_string.GetSize());
+	// std::cout << result_idx << " " << res << std::endl;
 	result_data[result_idx] = result_string;
 }
 

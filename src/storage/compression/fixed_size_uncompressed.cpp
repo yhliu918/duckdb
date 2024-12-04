@@ -178,9 +178,9 @@ void FixedSizeFetchRow(ColumnSegment &segment, ColumnFetchState &state, row_t ro
 	// first fetch the data from the base table
 	// auto data_ptr = handle.Ptr() + segment.GetBlockOffset() + NumericCast<idx_t>(row_id) * sizeof(T);
 	auto data_ptr = segment.block->buffer->buffer + segment.GetBlockOffset() + (row_id) * sizeof(T);
-	// int64_t value;
-	// memcpy(&value, data_ptr, sizeof(int64_t));
-	// std::cout << row_id << " " << value << std::endl;
+	// int32_t value;
+	// memcpy(&value, data_ptr, sizeof(int32_t));
+	// std::cout << " " << value << std::endl;
 	if (state.row_index != nullptr) {
 		for (auto index : *state.row_index) {
 			memcpy(FlatVector::GetData(result) + index * sizeof(T), data_ptr, sizeof(T));

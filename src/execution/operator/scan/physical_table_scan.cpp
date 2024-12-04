@@ -24,7 +24,8 @@ PhysicalTableScan::PhysicalTableScan(vector<LogicalType> types, TableFunction fu
 	for (auto &name : names) {
 		if (name == "rowid") {
 			name = "rowid(" + table_name + ")";
-			break;
+		} else {
+			name = table_name + "." + name;
 		}
 	}
 	this->disable_columns = std::move(disable_columns);

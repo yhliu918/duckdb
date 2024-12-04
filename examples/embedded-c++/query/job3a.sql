@@ -1,13 +1,13 @@
 SELECT min(title.title)
-from keyword AS k,
-     movie_info AS mi,
-     movie_keyword AS mk,
+from keyword,
+     movie_info,
+     movie_keyword,
      title
-WHERE k.keyword LIKE '%sequel%'
-  AND mi.info IN ('Bulgaria')
+WHERE keyword.keyword LIKE '%sequel%'
+  AND movie_info.info IN ('Bulgaria')
   AND title.production_year > 2005
-  AND title.id = mi.movie_id
-  AND title.id = mk.movie_id
-  AND mk.movie_id = mi.movie_id
-  AND k.id = mk.keyword_id;
+  AND title.id = movie_info.movie_id
+  AND title.id = movie_keyword.movie_id
+  AND movie_keyword.movie_id = movie_info.movie_id
+  AND keyword.id = movie_keyword.keyword_id;
 

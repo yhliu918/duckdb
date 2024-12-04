@@ -1,9 +1,9 @@
 #include "duckdb/planner/table_filter.hpp"
 
+#include "duckdb/execution/operator/scan/physical_table_scan.hpp"
 #include "duckdb/planner/filter/conjunction_filter.hpp"
 #include "duckdb/planner/filter/constant_filter.hpp"
 #include "duckdb/planner/filter/null_filter.hpp"
-#include "duckdb/execution/operator/scan/physical_table_scan.hpp"
 
 namespace duckdb {
 
@@ -66,7 +66,11 @@ DynamicTableFilterSet::GetFinalTableFilters(const PhysicalTableScan &scan,
 				// skip row id filters
 				continue;
 			}
-			result->filters[filter.first] = filter.second->Copy();
+			int col_id = filter.first;
+			int column_id = scan.column_ids_total[col_id];
+			int col_id_new =
+			    std::find(scan.column_ids.begin(), scan.column_ids.end(), column_id) - scan.column_ids.begin();
+			result->filters[col_id_new] = filter.second->Copy();
 		}
 	}
 	if (result->filters.empty()) {

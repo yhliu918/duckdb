@@ -8,6 +8,7 @@
 #include "duckdb/execution/operator/helper/physical_verify_vector.hpp"
 #include "duckdb/execution/operator/join/physical_hash_join.hpp"
 #include "duckdb/execution/operator/projection/physical_projection.hpp"
+#include "duckdb/execution/operator/scan/physical_column_data_scan.hpp"
 #include "duckdb/execution/operator/scan/physical_table_scan.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/config.hpp"
@@ -241,7 +242,14 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalOperator &
 	// for (auto &res_type : res_types) {
 	// 	std::cout << res_type << std::endl;
 	// }
-	plan->names = std::move(res_types);
+	if (res_types.size() < plan->types.size()) {
+		for (int i = res_types.size(); i < plan->types.size(); i++) {
+			res_types.push_back("NULL");
+		}
+	}
+	if (res_types.size() > 0) {
+		plan->names = std::move(res_types);
+	}
 
 	std::ifstream infile;
 	infile.open("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/op_mat_" +
@@ -256,18 +264,18 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalOperator &
 		}
 	}
 
-	// std::ifstream disable_columns_file;
-	// disable_columns_file.open("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/op_dis_" +
-	//                               std::to_string(plan->operator_index),
-	//                           std::ios::in);
-	// if (disable_columns_file.is_open()) {
-	// 	std::string mat_name;
-	// 	while (disable_columns_file >> mat_name) {
-	// 		int mat_col = std::find(plan->names.begin(), plan->names.end(), mat_name) - plan->names.begin();
-	// 		assert(plan->output_disable_columns[mat_col] == 0);
-	// 		plan->output_disable_columns[mat_col] = 1;
-	// 	}
-	// }
+	std::ifstream disable_columns_file;
+	disable_columns_file.open("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/op_dis_" +
+	                              std::to_string(plan->operator_index),
+	                          std::ios::in);
+	if (disable_columns_file.is_open()) {
+		std::string mat_name;
+		while (disable_columns_file >> mat_name) {
+			int mat_col = std::find(plan->names.begin(), plan->names.end(), mat_name) - plan->names.begin();
+			assert(plan->output_disable_columns[mat_col] == 0);
+			plan->output_disable_columns[mat_col] = 1;
+		}
+	}
 
 	std::string op_str = PrintOperator(plan);
 	std::cout << op_str << std::endl;
@@ -319,8 +327,14 @@ std::string PhysicalPlanGenerator::PrintOperator(const unique_ptr<PhysicalOperat
 
 		int i = 0;
 		for (auto &type : plan->types) {
+			std::string entry_name;
+			if (i < plan->names.size()) {
+				entry_name = plan->names[i];
+			} else {
+				entry_name = "NULL";
+			}
 			op_str += "(" + std::to_string(i) + ", " + type.ToString() + ", " +
-			          std::to_string(plan->disable_columns[i]) + " ," + plan->names[i] + ")\n";
+			          std::to_string(plan->disable_columns[i]) + " ," + entry_name + ")\n";
 			i++;
 		}
 		// for (int i = 0; i < plan->types.size(); i++) {
@@ -404,6 +418,12 @@ std::vector<std::string> PhysicalPlanGenerator::PrintOperatorCatalog(const uniqu
 				plan->must_enables_left.push_back(op_str_child_left[left_idx]);
 			}
 		}
+		if (op_str_child_right.size() == 0) {
+			if (hash_join.types.size() > op_str.size()) {
+				op_str.push_back("NULL");
+			}
+			break;
+		}
 		if (plan->must_enables_right.size() == 0) {
 			for (int i = 0; i < hash_join.condition_types.size(); i++) {
 				int right_idx = hash_join.conditions[i].right->Cast<BoundReferenceExpression>().index;
@@ -413,6 +433,9 @@ std::vector<std::string> PhysicalPlanGenerator::PrintOperatorCatalog(const uniqu
 		// payload columns
 		for (int i = 0; i < hash_join.payload_column_idxs_total.size(); i++) {
 			op_str.push_back(op_str_child_right[hash_join.payload_column_idxs_total[i]]);
+		}
+		if (hash_join.types.size() > op_str.size()) {
+			op_str.push_back("NULL");
 		}
 		break;
 		// right join keys

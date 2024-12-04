@@ -549,7 +549,9 @@ void ColumnData::FetchRowNew(TransactionData transaction, ColumnFetchState &stat
 		segment = data.GetSegment(row_id);
 		// segment = data.GetSegmentNode(row_id, row_id);
 	}
+	// segment = data.GetSegment(row_id);
 	// now perform the fetch within the segment
+	// std::cout << row_id;
 	segment->FetchRow(state, row_id, result, result_idx);
 	// merge any updates made to this row
 

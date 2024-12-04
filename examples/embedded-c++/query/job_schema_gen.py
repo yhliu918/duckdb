@@ -97,7 +97,7 @@ column_types = {
         "id": pa.int32(),
         "name": pa.string(),
         "imdb_index": pa.string(),
-        "imdb_id": pa.string(),
+        "imdb_id": pa.int32(),
         "name_pcode_nf": pa.string(),
         "surname_pcode": pa.string(),
         "md5sum": pa.string()
@@ -110,7 +110,7 @@ column_types = {
         "id": pa.int32(),
         "name": pa.string(),
         "country_code": pa.string(),
-        "imdb_id": pa.string(),
+        "imdb_id": pa.int32(),
         "name_pcode_nf": pa.string(),
         "name_pcode_sf": pa.string(),
         "md5sum": pa.string()
@@ -171,7 +171,7 @@ column_types = {
         "id": pa.int32(),
         "name": pa.string(),
         "imdb_index": pa.string(),
-        "imdb_id": pa.string(),
+        "imdb_id": pa.int32(),
         "gender": pa.string(),
         "name_pcode_cf": pa.string(),
         "name_pcode_nf": pa.string(),
@@ -188,7 +188,7 @@ column_types = {
         "imdb_index": pa.string(),
         "kind_id": pa.int32(),
         "production_year": pa.int32(),
-        "imdb_id": pa.string(),
+        "imdb_id": pa.int32(),
         "phonetic_code": pa.string(),
         "episode_of_id": pa.int32(),
         "season_nr": pa.int32(),
@@ -211,6 +211,7 @@ column_types = {
         "note": pa.string()
     }
 }
+
 
 data = {}
     

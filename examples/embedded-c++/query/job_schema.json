@@ -144,7 +144,7 @@
         },
         "char_name.imdb_id": {
             "col_id": 4,
-            "type": 25
+            "type": 13
         },
         "char_name.name_pcode_nf": {
             "col_id": 5,
@@ -192,7 +192,7 @@
         },
         "company_name.imdb_id": {
             "col_id": 4,
-            "type": 25
+            "type": 13
         },
         "company_name.name_pcode_nf": {
             "col_id": 5,
@@ -440,7 +440,7 @@
         },
         "name.imdb_id": {
             "col_id": 4,
-            "type": 25
+            "type": 13
         },
         "name.gender": {
             "col_id": 5,
@@ -530,7 +530,7 @@
         },
         "title.imdb_id": {
             "col_id": 6,
-            "type": 25
+            "type": 13
         },
         "title.phonetic_code": {
             "col_id": 7,
@@ -555,10 +555,6 @@
         "title.md5sum": {
             "col_id": 12,
             "type": 25
-        },
-        "title.rowid_dup": {
-            "col_id": 13,
-            "type": 13
         }
     }
 }
