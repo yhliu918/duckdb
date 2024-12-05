@@ -1,8 +1,16 @@
 #include "duckdb/execution/operator/join/physical_join.hpp"
 
 #include "duckdb/execution/operator/join/physical_hash_join.hpp"
+#include "duckdb/execution/operator/helper/physical_pipeline_breaker.hpp"
 #include "duckdb/parallel/meta_pipeline.hpp"
 #include "duckdb/parallel/pipeline.hpp"
+
+extern int parallel_build_tag;
+extern int split_probe_tag;
+extern int split_probe_rest;
+extern int debug_tag;
+extern int numa_tag;
+extern std::atomic<int> current_build_id;
 
 namespace duckdb {
 
@@ -55,6 +63,35 @@ void PhysicalJoin::BuildJoinPipelines(Pipeline &current, MetaPipeline &meta_pipe
 			child_meta_pipeline.GetPipelines(dependencies, false);
 			last_child_ptr = meta_pipeline.GetLastChild();
 		}
+
+		if (numa_tag) {
+			auto numa_id = current_build_id.fetch_add(1);
+			current.numa_id = numa_id;
+			vector<shared_ptr<Pipeline>> child_pipelines;
+			child_meta_pipeline.GetPipelines(child_pipelines, true);
+			for (auto &pipeline : child_pipelines) {
+				pipeline->numa_id = numa_id;
+			}
+		}
+		if (parallel_build_tag) {
+			vector<shared_ptr<Pipeline>> child_pipelines;
+			child_meta_pipeline.GetPipelines(child_pipelines, true);
+			for (auto &pipeline : child_pipelines) {
+				pipeline->half_thread_tag = true;
+			}
+		}
+	}
+
+	if (debug_tag && split_probe_rest != 0) {
+		auto breaker_types = op.children[0]->types;
+		auto breaker_estimated_cardinality = op.children[0]->estimated_cardinality;
+		auto breaker = make_uniq<PhysicalPipelineBreaker>(breaker_types, std::move(op.children[0]), breaker_estimated_cardinality);
+		op.children[0] = std::move(breaker);
+		split_probe_rest--;
+	}
+
+	if (debug_tag && split_probe_tag) {
+		current.half_thread_tag = true;
 	}
 
 	// continue building the current pipeline on the LHS (probe side)

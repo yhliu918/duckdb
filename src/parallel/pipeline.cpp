@@ -13,6 +13,8 @@
 #include "duckdb/parallel/pipeline_executor.hpp"
 #include "duckdb/parallel/task_scheduler.hpp"
 
+extern int debug_tag;
+extern int numa_tag;
 namespace duckdb {
 
 PipelineTask::PipelineTask(Pipeline &pipeline_p, shared_ptr<Event> event_p)
@@ -65,7 +67,7 @@ TaskExecutionResult PipelineTask::ExecuteTask(TaskExecutionMode mode) {
 }
 
 Pipeline::Pipeline(Executor &executor_p)
-    : executor(executor_p), ready(false), initialized(false), source(nullptr), sink(nullptr) {
+    : executor(executor_p), ready(false), initialized(false), source(nullptr), sink(nullptr), numa_id(0), half_thread_tag(false) {
 }
 
 ClientContext &Pipeline::GetClientContext() {
@@ -123,6 +125,13 @@ bool Pipeline::ScheduleParallel(shared_ptr<Event> &event) {
 	if (max_threads > active_threads) {
 		max_threads = active_threads;
 	}
+	std::cerr << std::to_string(max_threads) + " " + std::to_string(half_thread_tag) + "\n";
+	if (half_thread_tag) {
+		max_threads = (max_threads + 1) / 2;
+		if (max_threads >= 48) {
+			max_threads = 46;
+		}
+	}
 	return LaunchScanTasks(event, max_threads);
 }
 
@@ -177,7 +186,11 @@ bool Pipeline::LaunchScanTasks(shared_ptr<Event> &event, idx_t max_threads) {
 	for (idx_t i = 0; i < max_threads; i++) {
 		tasks.push_back(make_uniq<PipelineTask>(*this, event));
 	}
-	event->SetTasks(std::move(tasks));
+	if (numa_tag && half_thread_tag) {
+		event->SetTasksTest(std::move(tasks), numa_id);
+	} else {
+		event->SetTasks(std::move(tasks));
+	}
 	return true;
 }
 

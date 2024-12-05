@@ -24,6 +24,23 @@ DataChunk::DataChunk() : count(0), capacity(STANDARD_VECTOR_SIZE) {
 DataChunk::~DataChunk() {
 }
 
+DataChunk::DataChunk(DataChunk &&chunk_p) {
+	Move(chunk_p);
+}
+
+DataChunk::DataChunk(DataChunk &chunk_p)
+	: count(chunk_p.count), capacity(chunk_p.capacity), vector_caches(chunk_p.vector_caches) {
+	data.reserve(chunk_p.data.size());
+	for (auto &i : chunk_p.data) {
+		data.emplace_back(i);
+	}
+}
+
+DataChunk& DataChunk::operator=(DataChunk &&chunk_p) {
+	Move(chunk_p);
+	return *this;
+}
+
 void DataChunk::InitializeEmpty(const vector<LogicalType> &types) {
 	InitializeEmpty(types.begin(), types.end());
 }

@@ -93,6 +93,12 @@ public:
 	ProducerToken &GetToken() {
 		return *producer;
 	}
+	ProducerToken &GetTokenTest(int numa_id) {
+		if (numa_id % 2 == 0) {
+			return *producer;
+		}
+		return *producer_2_test;
+	}
 	void AddEvent(shared_ptr<Event> event);
 
 	void AddRecursiveCTE(PhysicalOperator &rec_cte);
@@ -161,6 +167,8 @@ private:
 	idx_t root_pipeline_idx;
 	//! The producer of this query
 	unique_ptr<ProducerToken> producer;
+
+	unique_ptr<ProducerToken> producer_2_test;
 	//! List of events
 	vector<shared_ptr<Event>> events;
 	//! The query profiler

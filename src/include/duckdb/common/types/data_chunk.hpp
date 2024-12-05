@@ -14,6 +14,8 @@
 #include "duckdb/common/types/vector.hpp"
 #include "duckdb/common/winapi.hpp"
 
+#include "duckdb/common/types/vector_cache.hpp"
+
 namespace duckdb {
 class Allocator;
 class ClientContext;
@@ -45,6 +47,10 @@ public:
 	//! Creates an empty DataChunk
 	DUCKDB_API DataChunk();
 	DUCKDB_API ~DataChunk();
+
+	DataChunk(DataChunk &&chunk_p);
+	DataChunk(DataChunk &chunk_p);
+	DataChunk& operator=(DataChunk &&chunk_p);
 
 	//! The vectors owned by the DataChunk.
 	vector<Vector> data;

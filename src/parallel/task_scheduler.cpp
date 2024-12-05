@@ -23,6 +23,9 @@
 #include <unistd.h>
 #endif
 
+extern int debug_tag;
+extern int numa_tag;
+
 namespace duckdb {
 
 struct SchedulerThread {
@@ -118,7 +121,7 @@ ProducerToken::~ProducerToken() {
 }
 
 TaskScheduler::TaskScheduler(DatabaseInstance &db)
-    : db(db), queue(make_uniq<ConcurrentQueue>()),
+    : db(db), queue(make_uniq<ConcurrentQueue>()), queue_2_test(make_uniq<ConcurrentQueue>()),
       allocator_flush_threshold(db.config.options.allocator_flush_threshold),
       allocator_background_threads(db.config.options.allocator_background_threads), requested_thread_count(0),
       current_thread_count(1) {
@@ -148,44 +151,69 @@ unique_ptr<ProducerToken> TaskScheduler::CreateProducer() {
 	return make_uniq<ProducerToken>(*this, std::move(token));
 }
 
+unique_ptr<ProducerToken> TaskScheduler::CreateProducerTest() {
+	auto token = make_uniq<QueueProducerToken>(*queue_2_test);
+	return make_uniq<ProducerToken>(*this, std::move(token));
+}
+
 void TaskScheduler::ScheduleTask(ProducerToken &token, shared_ptr<Task> task) {
 	// Enqueue a task for the given producer token and signal any sleeping threads
 	queue->Enqueue(token, std::move(task));
+}
+
+void TaskScheduler::ScheduleTaskTest(ProducerToken &token, shared_ptr<Task> task, int numa_id) {
+	// Enqueue a task for the given producer token and signal any sleeping threads
+	if (numa_id % 2 == 0) {
+		queue->Enqueue(token, std::move(task));
+	} else {
+		queue_2_test->Enqueue(token, std::move(task));
+	}
 }
 
 bool TaskScheduler::GetTaskFromProducer(ProducerToken &token, shared_ptr<Task> &task) {
 	return queue->DequeueFromProducer(token, task);
 }
 
+bool TaskScheduler::GetTaskFromProducerTest(ProducerToken &token, shared_ptr<Task> &task) {
+	return queue_2_test->DequeueFromProducer(token, task);
+}
+
 void TaskScheduler::ExecuteForever(atomic<bool> *marker) {
 #ifndef DUCKDB_NO_THREADS
 	static constexpr const int64_t INITIAL_FLUSH_WAIT = 500000; // initial wait time of 0.5s (in mus) before flushing
+
+	auto cpu_id = GetEstimatedCPUId();
+	auto my_queue = queue.get();
+	if (numa_tag && cpu_id % 2 == 1) {
+		my_queue = queue_2_test.get();
+	}
 
 	shared_ptr<Task> task;
 	// loop until the marker is set to false
 	while (*marker) {
 		if (!Allocator::SupportsFlush()) {
 			// allocator can't flush, just start an untimed wait
-			queue->semaphore.wait();
-		} else if (!queue->semaphore.wait(INITIAL_FLUSH_WAIT)) {
+			my_queue->semaphore.wait();
+		} else if (!my_queue->semaphore.wait(INITIAL_FLUSH_WAIT)) {
 			// allocator can flush, we flush this threads outstanding allocations after it was idle for 0.5s
 			Allocator::ThreadFlush(allocator_background_threads, allocator_flush_threshold,
 			                       NumericCast<idx_t>(requested_thread_count.load()));
 			auto decay_delay = Allocator::DecayDelay();
 			if (!decay_delay.IsValid()) {
 				// no decay delay specified - just wait
-				queue->semaphore.wait();
+				my_queue->semaphore.wait();
 			} else {
-				if (!queue->semaphore.wait(UnsafeNumericCast<int64_t>(decay_delay.GetIndex()) * 1000000 -
+				if (!my_queue->semaphore.wait(UnsafeNumericCast<int64_t>(decay_delay.GetIndex()) * 1000000 -
 				                           INITIAL_FLUSH_WAIT)) {
 					// in total, the thread was idle for the entire decay delay (note: seconds converted to mus)
 					// mark it as idle and start an untimed wait
 					Allocator::ThreadIdle();
-					queue->semaphore.wait();
+					my_queue->semaphore.wait();
 				}
 			}
 		}
-		if (queue->q.try_dequeue(task)) {
+
+		if (my_queue->q.try_dequeue(task)) {
 			auto execute_result = task->Execute(TaskExecutionMode::PROCESS_ALL);
 
 			switch (execute_result) {
@@ -275,7 +303,13 @@ void TaskScheduler::ExecuteTasks(idx_t max_tasks) {
 }
 
 #ifndef DUCKDB_NO_THREADS
-static void ThreadExecuteTasks(TaskScheduler *scheduler, atomic<bool> *marker) {
+static void ThreadExecuteTasks(TaskScheduler *scheduler, atomic<bool> *marker, int cpu_id) {
+	if (numa_tag) {
+		cpu_set_t cpu_mask;
+		CPU_ZERO(&cpu_mask);
+		CPU_SET(cpu_id, &cpu_mask);
+		pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpu_mask);
+	}
 	scheduler->ExecuteForever(marker);
 }
 #endif
@@ -313,7 +347,12 @@ void TaskScheduler::SetAllocatorBackgroundThreads(bool enable) {
 void TaskScheduler::Signal(idx_t n) {
 #ifndef DUCKDB_NO_THREADS
 	typedef std::make_signed<std::size_t>::type ssize_t;
-	queue->semaphore.signal(NumericCast<ssize_t>(n));
+	if (numa_tag) {
+		queue->semaphore.signal(NumericCast<ssize_t>(n / 2));
+		queue_2_test->semaphore.signal(NumericCast<ssize_t>((n + 1) / 2));
+	} else {
+		queue->semaphore.signal(NumericCast<ssize_t>(n));
+	}
 #endif
 }
 
@@ -387,7 +426,7 @@ void TaskScheduler::RelaunchThreadsInternal(int32_t n) {
 			auto marker = unique_ptr<atomic<bool>>(new atomic<bool>(true));
 			unique_ptr<thread> worker_thread;
 			try {
-				worker_thread = make_uniq<thread>(ThreadExecuteTasks, this, marker.get());
+				worker_thread = make_uniq<thread>(ThreadExecuteTasks, this, marker.get(), i + 1);
 			} catch (std::exception &ex) {
 				// thread constructor failed - this can happen when the system has too many threads allocated
 				// in this case we cannot allocate more threads - stop launching them

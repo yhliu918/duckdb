@@ -43,6 +43,8 @@ public:
 
 	void SetTasks(vector<shared_ptr<Task>> tasks);
 
+	void SetTasksTest(vector<shared_ptr<Task>> tasks, int numa_id);
+
 	void InsertEvent(shared_ptr<Event> replacement_event);
 
 	bool IsFinished() const {

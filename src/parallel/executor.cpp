@@ -394,6 +394,7 @@ void Executor::InitializeInternal(PhysicalOperator &plan) {
 		this->profiler = ClientData::Get(context).profiler;
 		profiler->Initialize(plan);
 		this->producer = scheduler.CreateProducer();
+		this->producer_2_test = scheduler.CreateProducerTest();
 
 		// build and ready the pipelines
 		PipelineBuildState state;
@@ -558,6 +559,9 @@ PendingExecutionResult Executor::ExecuteTask(bool dry_run) {
 		} else {
 			if (!task) {
 				scheduler.GetTaskFromProducer(*producer, task);
+			}
+			if (!task) {
+				scheduler.GetTaskFromProducerTest(*producer_2_test, task);
 			}
 			current_task = task.get();
 		}

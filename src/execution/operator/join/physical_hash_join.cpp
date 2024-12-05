@@ -21,6 +21,18 @@
 #include "duckdb/storage/storage_manager.hpp"
 #include "duckdb/storage/temporary_memory_manager.hpp"
 
+#include <sys/time.h>
+extern int debug_tag;
+extern int numa_tag;
+extern double prepare_payloads_end;
+extern double init_pointer_table_end;
+extern double build_end;
+static double getNow() {
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	return tv.tv_sec * 1000.0 + tv.tv_usec / 1000.0;
+}
+
 namespace duckdb {
 
 PhysicalHashJoin::PhysicalHashJoin(LogicalOperator &op, unique_ptr<PhysicalOperator> left,
@@ -342,6 +354,86 @@ void PhysicalHashJoin::PrepareFinalize(ClientContext &context, GlobalSinkState &
 	gstate.temporary_memory_state->SetRemainingSize(gstate.total_size);
 }
 
+class HashJoinTableInitTask : public ExecutorTask {
+public:
+	HashJoinTableInitTask(shared_ptr<Event> event_p, ClientContext &context, HashJoinGlobalSinkState &sink_p,
+	                      idx_t entry_idx_from_p, idx_t entry_idx_to_p, const PhysicalOperator &op_p)
+	    : ExecutorTask(context, std::move(event_p), op_p), sink(sink_p), entry_idx_from(entry_idx_from_p),
+	      entry_idx_to(entry_idx_to_p) {
+	}
+
+	TaskExecutionResult ExecuteTask(TaskExecutionMode mode) override {
+		sink.hash_table->InitializePointerTable(entry_idx_from, entry_idx_to);
+
+		if (debug_tag) {
+			init_pointer_table_end = getNow();
+		}
+
+		event->FinishTask();
+		return TaskExecutionResult::TASK_FINISHED;
+	}
+
+private:
+	HashJoinGlobalSinkState &sink;
+	idx_t entry_idx_from;
+	idx_t entry_idx_to;
+};
+
+
+class HashJoinTableInitEvent : public BasePipelineEvent {
+public:
+	HashJoinTableInitEvent(Pipeline &pipeline_p, HashJoinGlobalSinkState &sink)
+	    : BasePipelineEvent(pipeline_p), sink(sink) {
+	}
+
+	HashJoinGlobalSinkState &sink;
+
+public:
+	void Schedule() override {
+		auto &context = pipeline->GetClientContext();
+
+		vector<shared_ptr<Task>> finalize_tasks;
+		auto &ht = *sink.hash_table;
+		const auto entry_count = ht.capacity;
+		auto num_threads = NumericCast<idx_t>(sink.num_threads);
+		if (pipeline->half_thread_tag) {
+			num_threads = (NumericCast<idx_t>(sink.num_threads) + 1) / 2; 
+		}
+		if (num_threads == 1 || (entry_count < PARALLEL_CONSTRUCT_THRESHOLD && !context.config.verify_parallelism)) {
+			// Single-threaded finalize
+			finalize_tasks.push_back(
+			    make_uniq<HashJoinTableInitTask>(shared_from_this(), context, sink, 0U, entry_count, sink.op));
+		} else {
+			// Parallel finalize
+			auto entries_per_thread = MaxValue<idx_t>((entry_count + num_threads - 1) / num_threads, 1);
+
+			idx_t entry_idx = 0;
+			for (idx_t thread_idx = 0; thread_idx < num_threads; thread_idx++) {
+				auto entry_idx_from = entry_idx;
+				auto entry_idx_to = MinValue<idx_t>(entry_idx_from + entries_per_thread, entry_count);
+				finalize_tasks.push_back(make_uniq<HashJoinTableInitTask>(shared_from_this(), context, sink,
+				                                                          entry_idx_from, entry_idx_to, sink.op));
+				entry_idx = entry_idx_to;
+				if (entry_idx == entry_count) {
+					break;
+				}
+			}
+		}
+		if (numa_tag) {
+			SetTasksTest(std::move(finalize_tasks), pipeline->numa_id);
+		} else {
+			SetTasks(std::move(finalize_tasks));
+		}
+	}
+
+	void FinishEvent() override {
+		sink.hash_table->GetDataCollection().VerifyEverythingPinned();
+		sink.hash_table->finalized = true;
+	}
+
+	static constexpr const idx_t PARALLEL_CONSTRUCT_THRESHOLD = 1048576;
+};
+
 class HashJoinFinalizeTask : public ExecutorTask {
 public:
 	HashJoinFinalizeTask(shared_ptr<Event> event_p, ClientContext &context, HashJoinGlobalSinkState &sink_p,
@@ -352,6 +444,11 @@ public:
 
 	TaskExecutionResult ExecuteTask(TaskExecutionMode mode) override {
 		sink.hash_table->Finalize(chunk_idx_from, chunk_idx_to, parallel);
+
+		if (debug_tag) {
+			build_end = getNow();
+		}
+
 		event->FinishTask();
 		return TaskExecutionResult::TASK_FINISHED;
 	}
@@ -378,7 +475,11 @@ public:
 		vector<shared_ptr<Task>> finalize_tasks;
 		auto &ht = *sink.hash_table;
 		const auto chunk_count = ht.GetDataCollection().ChunkCount();
-		const auto num_threads = NumericCast<idx_t>(sink.num_threads);
+		// const auto num_threads = NumericCast<idx_t>(sink.num_threads);
+		auto num_threads = NumericCast<idx_t>(sink.num_threads);
+		if (pipeline->half_thread_tag) {
+			num_threads = (NumericCast<idx_t>(sink.num_threads) + 1) / 2; 
+		}
 		if (num_threads == 1 || (ht.Count() < PARALLEL_CONSTRUCT_THRESHOLD && !context.config.verify_parallelism)) {
 			// Single-threaded finalize
 			finalize_tasks.push_back(
@@ -399,7 +500,11 @@ public:
 				}
 			}
 		}
-		SetTasks(std::move(finalize_tasks));
+		if (numa_tag) {
+			SetTasksTest(std::move(finalize_tasks), pipeline->numa_id);
+		} else {
+			SetTasks(std::move(finalize_tasks));
+		}
 	}
 
 	void FinishEvent() override {
@@ -415,9 +520,18 @@ void HashJoinGlobalSinkState::ScheduleFinalize(Pipeline &pipeline, Event &event)
 		hash_table->finalized = true;
 		return;
 	}
-	hash_table->InitializePointerTable();
-	auto new_event = make_shared_ptr<HashJoinFinalizeEvent>(pipeline, *this);
-	event.InsertEvent(std::move(new_event));
+
+	if (debug_tag) {
+		prepare_payloads_end = getNow();
+	}
+
+	hash_table->AllocatePointerTable();
+
+	auto new_init_event = make_shared_ptr<HashJoinTableInitEvent>(pipeline, *this);
+	event.InsertEvent(new_init_event);
+
+	auto new_finalize_event = make_shared_ptr<HashJoinFinalizeEvent>(pipeline, *this);
+	new_init_event->InsertEvent(std::move(new_finalize_event));
 }
 
 void HashJoinGlobalSinkState::InitializeProbeSpill() {
@@ -695,6 +809,8 @@ OperatorResultType PhysicalHashJoin::ExecuteInternal(ExecutionContext &context, 
 		return sink.perfect_join_executor->ProbePerfectHashTable(context, input, chunk, *state.perfect_hash_join_state);
 	}
 
+	double start_time = getNow();
+
 	if (sink.external && !state.initialized) {
 		// some initialization for external hash join
 		if (!sink.probe_spill) {
@@ -928,7 +1044,8 @@ void HashJoinGlobalSourceState::PrepareBuild(HashJoinGlobalSinkState &sink) {
 
 	build_chunks_per_thread = MaxValue<idx_t>((build_chunk_count + sink.num_threads - 1) / sink.num_threads, 1);
 
-	ht.InitializePointerTable();
+	ht.AllocatePointerTable();
+	ht.InitializePointerTable(0, ht.capacity);
 
 	global_stage = HashJoinSourceStage::BUILD;
 }
