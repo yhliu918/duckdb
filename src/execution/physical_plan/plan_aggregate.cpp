@@ -156,6 +156,15 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalAggregate 
 	auto plan = CreatePlan(*op.children[0]);
 	plan = ExtractAggregateExpressions(std::move(plan), op.expressions, op.groups);
 	plan->names = PrintOperatorCatalog(plan);
+	plan->operator_index = operator_idx;
+	auto &projection = plan->Cast<PhysicalProjection>();
+	for (auto &expr : projection.select_list) {
+		if (expr->type == ExpressionType::BOUND_REF) {
+			auto &bound_ref = (BoundReferenceExpression &)*expr;
+			projection.disable_columns.push_back(projection.children[0]->disable_columns[bound_ref.index]);
+		}
+	}
+	projection.output_disable_columns = projection.disable_columns;
 
 	if (op.groups.empty() && op.grouping_sets.size() <= 1) {
 		// no groups, check if we can use a simple aggregation
@@ -238,8 +247,6 @@ PhysicalPlanGenerator::ExtractAggregateExpressions(unique_ptr<PhysicalOperator> 
 	}
 	auto projection =
 	    make_uniq<PhysicalProjection>(std::move(types), std::move(expressions), child->estimated_cardinality);
-	projection->disable_columns = child->disable_columns;
-	projection->output_disable_columns = projection->disable_columns;
 	projection->children.push_back(std::move(child));
 	return std::move(projection);
 }

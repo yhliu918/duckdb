@@ -61,7 +61,9 @@ bool PipelineExecutor::parse_materialize_config(Pipeline &pipeline_p, bool read_
 				int string_length = 0;
 				int lines = 0;
 				file >> dependent_pipeline >> keep_rowid >> lines >> rowid_name;
-				auto &chunk_layout = pipeline_p.operators[pipeline_p.operators.size() - 1].get().names;
+				auto &chunk_layout = pipeline_p.operators.size() == 0
+				                         ? pipeline_p.source->names
+				                         : pipeline_p.operators[pipeline_p.operators.size() - 1].get().names;
 				rowid_col_idx = std::find(chunk_layout.begin(), chunk_layout.end(), rowid_name) - chunk_layout.begin();
 
 				for (int j = 0; j < lines; j++) {
@@ -159,11 +161,11 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 			dump = (dump_value == 1);
 		}
 		if (dump) {
-			std::cout << "Dumping pipeline info" << std::endl;
+			// std::cout << "Dumping pipeline info" << std::endl;
 			dump_pipeline_info(pipeline);
 		}
 
-		std::cout << pipeline.pipeline_id << " " << pipeline.parent << " " << pipeline.ToString() << std::endl;
+		// std::cout << pipeline.pipeline_id << " " << pipeline.parent << " " << pipeline.ToString() << std::endl;
 	}
 	bool mat_mode = parse_materialize_config(pipeline, false);
 	if (pipeline.sink) {
@@ -258,8 +260,8 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 	if (pipeline.materialize_strategy_mode == 1) {
 		int row_id_column_number = pipeline.materialize_maps.size();
 		for (auto &[rowid_col_idx, mat_map] : pipeline.materialize_maps) {
-			inverted_indexnew[rowid_col_idx].reserve(200);
-			inverted_indexnew[rowid_col_idx].resize(200);
+			inverted_indexnew[rowid_col_idx].reserve(500);
+			inverted_indexnew[rowid_col_idx].resize(500);
 			for (auto &[colid, type] : mat_map.materialize_column_types) {
 				pipeline.final_materialize_column_types[colid] = type;
 			}
@@ -651,7 +653,7 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 					for (int64_t i = 0; i < sink_chunk.size(); i++) {
 						// auto rowid = sel[i];
 						auto rowid = use_sel_index ? sel[sel_index->get_index(i)] : sel[i];
-
+						assert(rowid / STANDARD_ROW_GROUPS_SIZE < 500);
 						// std::cout << rowid << std::endl;
 						inverted_indexnew[rowid_col_idx][rowid / STANDARD_ROW_GROUPS_SIZE].emplace_back(
 						    std::make_pair(rowid, index++));
@@ -818,7 +820,7 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 	}
 
 	bool print = pipeline.operators.size() > 0 || pipeline.sink->type != PhysicalOperatorType::CREATE_TABLE_AS;
-	print = false;
+	// print = false;
 	if (print) {
 		std::cout << "----------------------------" << std::endl;
 		for (int i = 0; i < pipeline.operator_total_time.size() - 1; i++) {

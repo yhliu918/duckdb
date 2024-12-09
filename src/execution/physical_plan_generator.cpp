@@ -255,10 +255,15 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalOperator &
 	infile.open("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/op_mat_" +
 	                std::to_string(plan->operator_index),
 	            std::ios::in);
-	if (infile.is_open()) {
+	if (infile.is_open() && plan->type != PhysicalOperatorType::TRANSACTION &&
+	    plan->type != PhysicalOperatorType::RESET && plan->type != PhysicalOperatorType::SET &&
+	    plan->type != PhysicalOperatorType::PRAGMA) {
 		std::string mat_name;
 		while (infile >> mat_name) {
 			int mat_col = std::find(plan->names.begin(), plan->names.end(), mat_name) - plan->names.begin();
+			if (plan->output_disable_columns[mat_col] == 0) {
+				std::cout << "Failed to disable column " << mat_name << std::endl;
+			}
 			assert(plan->output_disable_columns[mat_col] != 0);
 			plan->output_disable_columns[mat_col] = 0;
 		}
@@ -268,17 +273,22 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalOperator &
 	disable_columns_file.open("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/op_dis_" +
 	                              std::to_string(plan->operator_index),
 	                          std::ios::in);
-	if (disable_columns_file.is_open()) {
+	if (disable_columns_file.is_open() && plan->type != PhysicalOperatorType::TRANSACTION &&
+	    plan->type != PhysicalOperatorType::RESET && plan->type != PhysicalOperatorType::SET &&
+	    plan->type != PhysicalOperatorType::PRAGMA) {
 		std::string mat_name;
 		while (disable_columns_file >> mat_name) {
 			int mat_col = std::find(plan->names.begin(), plan->names.end(), mat_name) - plan->names.begin();
+			if (plan->output_disable_columns[mat_col] != 0) {
+				std::cout << "Failed to enable column " << mat_name << std::endl;
+			}
 			assert(plan->output_disable_columns[mat_col] == 0);
 			plan->output_disable_columns[mat_col] = 1;
 		}
 	}
 
-	std::string op_str = PrintOperator(plan);
-	std::cout << op_str << std::endl;
+	// std::string op_str = PrintOperator(plan);
+	// std::cout << op_str << std::endl;
 	if (!plan) {
 		throw InternalException("Physical plan generator - no plan generated");
 	}

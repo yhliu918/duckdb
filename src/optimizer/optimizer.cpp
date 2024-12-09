@@ -226,18 +226,13 @@ void Optimizer::RunBuiltInOptimizers() {
 		JoinFilterPushdownOptimizer join_filter_pushdown(*this);
 		join_filter_pushdown.VisitOperator(*plan);
 	});
-
-	// Modify into materialization plan
-	// MaterializePlanner materialize_planner(*this);
-	// materialize_planner.VisitOperator(*plan);
-	// plan->ResolveOperatorTypes();
 }
 
 unique_ptr<LogicalOperator> Optimizer::Optimize(unique_ptr<LogicalOperator> plan_p) {
 	Verify(*plan_p);
 
 	this->plan = std::move(plan_p);
-	std::cout << this->plan->ToString() << std::endl;
+	// std::cout << this->plan->ToString() << std::endl;
 
 	RunBuiltInOptimizers();
 	// we can add the materialize optimization here

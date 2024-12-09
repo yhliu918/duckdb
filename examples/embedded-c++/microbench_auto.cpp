@@ -26,7 +26,7 @@ json plan;
 
 std::unordered_map<std::string, vector<int>>
 find_materialize_position(std::vector<std::string> attribute, std::unordered_map<std::string, int> &from_pipeline,
-                          std::vector<std::string> &table_names) {
+                          std::unordered_set<std::string> &table_names) {
 	std::ifstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/query/tpch_schema.json");
 	file >> schema;
 	file.close();
@@ -60,7 +60,7 @@ find_materialize_position(std::vector<std::string> attribute, std::unordered_map
 				file << schema[it.key()][it2.key()]["col_id"] << std::endl;
 				table_info[it2.key()] = it.key();
 				correct_mat_key[it2.key()] = true;
-				table_names.push_back(it.key());
+				table_names.insert(it.key());
 			}
 		}
 	}
@@ -76,6 +76,25 @@ find_materialize_position(std::vector<std::string> attribute, std::unordered_map
 			if (it.value()["table"] == table_name) {
 				int pipeline_id = std::stoi(it.key());
 				from_pipeline[attr] = pipeline_id;
+				std::vector<std::string> must_enable_start_current =
+				    it.value().contains("must_enable_columns_start")
+				        ? it.value()["must_enable_columns_start"].get<std::vector<std::string>>()
+				        : std::vector<std::string>();
+				std::vector<std::string> must_enable_end_current =
+				    it.value().contains("must_enable_columns_end")
+				        ? it.value()["must_enable_columns_end"].get<std::vector<std::string>>()
+				        : std::vector<std::string>();
+				if (std::find(must_enable_start_current.begin(), must_enable_start_current.end(), attr) !=
+				    must_enable_start_current.end()) {
+					//! should be materialized at first of this pipeline
+					continue;
+				}
+				if (std::find(must_enable_end_current.begin(), must_enable_end_current.end(), attr) !=
+				    must_enable_end_current.end()) {
+					possible_mat_pos[attr].push_back(pipeline_id);
+					//! must be materialized inside this pipeline
+					continue;
+				}
 				while (true) {
 					if (pipeline_id == 0) {
 						break;
@@ -200,7 +219,7 @@ int main(int argc, char *argv[]) {
 		          << std::endl;
 	}
 
-	std::string query_file = "tmp.sql";
+	std::string query_file = "tmp";
 	if (argc > 4) {
 		query_file = argv[4];
 	}
@@ -225,14 +244,19 @@ int main(int argc, char *argv[]) {
 	int cmd_result = system(command.c_str());
 
 	DuckDB db(nullptr);
+	// DuckDB db("/home/yihao/duckdb/origin/duckdb/examples/embedded-c++/release/tpch_uncom.db");
 	Connection con(db);
 	con.Query("SET threads TO " + thread + ";");
-	// con.Query("SET disabled_optimizers = 'join_order,build_side_probe_side';");
+
+	// con.Query("SET disabled_optimizers = 'COMPRESSED_MATERIALIZATION,join_order,build_side_probe_side';");
 	con.Query("SET disabled_optimizers = 'COMPRESSED_MATERIALIZATION';");
 	con.Query("create table partsupp as from '/home/yihao/tpch-dbgen/partsupp.parquet';");
 	con.Query("create table part as from '/home/yihao/tpch-dbgen/part.parquet';");
-	// con.Query("create table lineitem as from '/home/yihao/tpch-dbgen/lineitem.parquet';");
+	con.Query("create table lineitem as from '/home/yihao/tpch-dbgen/lineitem.parquet';");
 	con.Query("create table supplier as from '/home/yihao/tpch-dbgen/supplier.parquet';");
+	con.Query("create table orders as from '/home/yihao/tpch-dbgen/orders.parquet';");
+	con.Query("create table customer as from '/home/yihao/tpch-dbgen/customer.parquet';");
+	con.Query("create table nation as from '/home/yihao/tpch-dbgen/nation.parquet';");
 
 	std::string select_keys = query.substr(0, query.find("from"));
 	std::string left_query = query.substr(query.find("from"));
@@ -248,11 +272,15 @@ int main(int argc, char *argv[]) {
 		materialize_keys.push_back(attribute);
 	}
 	unordered_map<std::string, int> from_pipeline;
-	std::vector<std::string> table_name_sets;
+	std::unordered_set<std::string> table_name_sets;
 	auto possible_mat_options = find_materialize_position(materialize_keys, from_pipeline, table_name_sets);
 	for (auto &[attr, pipeline_ids] : possible_mat_options) {
 		std::cout << attr << ": ";
 		for (auto &pipeline_id : pipeline_ids) {
+			if (pipeline_id == from_pipeline[attr]) {
+				std::cout << pipeline_id << "(same as the source pipeline) ";
+				continue;
+			}
 			std::cout << pipeline_id << " ";
 		}
 		std::cout << std::endl;
@@ -286,6 +314,7 @@ int main(int argc, char *argv[]) {
 	write_materialize_config(materialize_pos, push_source, from_pipeline);
 
 	double start = getNow();
+	std::cout << query << std::endl;
 	auto result = con.Query(query);
 	double end = getNow();
 	if (print_result) {
@@ -293,4 +322,5 @@ int main(int argc, char *argv[]) {
 	}
 	result->PrintRowNumber();
 	std::cout << thread << " " << end - start << std::endl;
+	exit(0);
 }
