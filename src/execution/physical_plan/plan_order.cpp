@@ -19,6 +19,8 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalOrder &op)
 		}
 		auto order =
 		    make_uniq<PhysicalOrder>(op.types, std::move(op.orders), std::move(projections), op.estimated_cardinality);
+		order->disable_columns = plan->disable_columns;
+		order->output_disable_columns = order->disable_columns;
 		order->children.push_back(std::move(plan));
 		plan = std::move(order);
 	}

@@ -181,8 +181,6 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalAggregate 
 		if (use_simple_aggregation) {
 			groupby = make_uniq_base<PhysicalOperator, PhysicalUngroupedAggregate>(op.types, std::move(op.expressions),
 			                                                                       op.estimated_cardinality);
-			groupby->disable_columns = plan->disable_columns;
-			groupby->output_disable_columns = groupby->disable_columns;
 		} else {
 			groupby = make_uniq_base<PhysicalOperator, PhysicalHashAggregate>(
 			    context, op.types, std::move(op.expressions), op.estimated_cardinality);
@@ -201,7 +199,10 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalAggregate 
 			    std::move(op.grouping_functions), op.estimated_cardinality);
 		}
 	}
+	groupby->disable_columns = plan->disable_columns;
+	groupby->output_disable_columns = groupby->disable_columns;
 	groupby->children.push_back(std::move(plan));
+
 	return groupby;
 }
 

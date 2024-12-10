@@ -3,10 +3,12 @@
 #include "duckdb/catalog/catalog_entry/scalar_function_catalog_entry.hpp"
 #include "duckdb/common/types/column/column_data_collection.hpp"
 #include "duckdb/execution/column_binding_resolver.hpp"
+#include "duckdb/execution/operator/aggregate/physical_hash_aggregate.hpp"
 #include "duckdb/execution/operator/aggregate/physical_ungrouped_aggregate.hpp"
 #include "duckdb/execution/operator/filter/physical_filter.hpp"
 #include "duckdb/execution/operator/helper/physical_verify_vector.hpp"
 #include "duckdb/execution/operator/join/physical_hash_join.hpp"
+#include "duckdb/execution/operator/order/physical_order.hpp"
 #include "duckdb/execution/operator/projection/physical_projection.hpp"
 #include "duckdb/execution/operator/scan/physical_column_data_scan.hpp"
 #include "duckdb/execution/operator/scan/physical_table_scan.hpp"
@@ -287,8 +289,8 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalOperator &
 		}
 	}
 
-	// std::string op_str = PrintOperator(plan);
-	// std::cout << op_str << std::endl;
+	std::string op_str = PrintOperator(plan);
+	std::cout << op_str << std::endl;
 	if (!plan) {
 		throw InternalException("Physical plan generator - no plan generated");
 	}
@@ -305,6 +307,26 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalOperator &
 std::string PhysicalPlanGenerator::PrintOperator(const unique_ptr<PhysicalOperator> &plan) {
 	std::string op_str = std::to_string(plan->operator_index) + " " + plan->GetName() + "\n";
 	switch (plan->type) {
+	case PhysicalOperatorType::ORDER_BY: {
+		auto &order = plan->Cast<PhysicalOrder>();
+		int i = 0;
+		for (auto &type : plan->types) {
+			op_str += "(" + std::to_string(i) + ", " + type.ToString() + ", " +
+			          std::to_string(plan->disable_columns[i]) + " ," + plan->names[i] + ")\n";
+			i++;
+		}
+		break;
+	}
+	case PhysicalOperatorType::HASH_GROUP_BY: {
+		auto &aggregate = plan->Cast<PhysicalHashAggregate>();
+		int i = 0;
+		for (auto &type : plan->types) {
+			op_str += "(" + std::to_string(i) + ", " + type.ToString() + ", " +
+			          std::to_string(plan->disable_columns[i]) + " ," + plan->names[i] + ")\n";
+			i++;
+		}
+		break;
+	}
 	case PhysicalOperatorType::UNGROUPED_AGGREGATE: {
 		auto &aggregate = plan->Cast<PhysicalUngroupedAggregate>();
 		int i = 0;
@@ -347,16 +369,10 @@ std::string PhysicalPlanGenerator::PrintOperator(const unique_ptr<PhysicalOperat
 			          std::to_string(plan->disable_columns[i]) + " ," + entry_name + ")\n";
 			i++;
 		}
-		// for (int i = 0; i < plan->types.size(); i++) {
-		// 	if (i < plan->children[0]->types.size()) {
-		// 		op_str += "(" + std::to_string(i) + ", 0" + ")\n";
-		// 	} else {
-		// 		op_str += "(" + std::to_string(i) + ", 1" + ")\n";
-		// 	}
-		// }
 		break;
 	}
 	default:
+		std::cout << "Unknown operator type: " << PhysicalOperatorToString(plan->type) << std::endl;
 		break;
 	}
 	return op_str;
@@ -365,6 +381,41 @@ std::string PhysicalPlanGenerator::PrintOperator(const unique_ptr<PhysicalOperat
 std::vector<std::string> PhysicalPlanGenerator::PrintOperatorCatalog(const unique_ptr<PhysicalOperator> &plan) {
 	std::vector<std::string> op_str;
 	switch (plan->type) {
+	case PhysicalOperatorType::ORDER_BY: {
+		auto &order = plan->Cast<PhysicalOrder>();
+		std::vector<std::string> op_str_child = PrintOperatorCatalog(order.children[0]);
+		for (int i = 0; i < order.orders.size(); i++) {
+			auto &bound_ref = order.orders[i].expression->Cast<BoundReferenceExpression>();
+			op_str.push_back(op_str_child[bound_ref.index]);
+		}
+		for (int i = 0; i < order.projections.size(); i++) {
+			op_str.push_back(op_str_child[order.projections[i]]);
+		}
+		break;
+	}
+	case PhysicalOperatorType::HASH_GROUP_BY: {
+		auto &aggregate = plan->Cast<PhysicalHashAggregate>();
+		std::vector<std::string> op_str_child = PrintOperatorCatalog(aggregate.children[0]);
+		for (int i = 0; i < aggregate.grouped_aggregate_data.groups.size(); i++) {
+			auto &group = aggregate.grouped_aggregate_data.groups[i];
+			if (group->type == ExpressionType::BOUND_REF) {
+				auto &bound_ref = (BoundReferenceExpression &)*group;
+				op_str.push_back(op_str_child[bound_ref.index]);
+			}
+		}
+		for (int i = 0; i < aggregate.grouped_aggregate_data.aggregates.size(); i++) {
+			auto &aggr = aggregate.grouped_aggregate_data.aggregates[i]->Cast<BoundAggregateExpression>();
+			for (auto &child : aggr.children) {
+				auto &bound_ref = child->Cast<BoundReferenceExpression>();
+				op_str.push_back(op_str_child[bound_ref.index]);
+			}
+			if (aggr.filter) {
+				auto &bound_ref = aggr.filter->Cast<BoundReferenceExpression>();
+				op_str.push_back(op_str_child[bound_ref.index]);
+			}
+		}
+		break;
+	}
 	case PhysicalOperatorType::UNGROUPED_AGGREGATE: {
 		auto &aggregate = plan->Cast<PhysicalUngroupedAggregate>();
 		std::vector<std::string> op_str_child = PrintOperatorCatalog(aggregate.children[0]);

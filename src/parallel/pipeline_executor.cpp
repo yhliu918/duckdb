@@ -119,8 +119,9 @@ void PipelineExecutor::dump_pipeline_info(Pipeline &pipeline_p) {
 		op_index++;
 	}
 	auto sink = pipeline_p.GetSink();
-	if (sink && (sink->type == PhysicalOperatorType::RESULT_COLLECTOR ||
-	             sink->type == PhysicalOperatorType::UNGROUPED_AGGREGATE)) {
+	if (sink &&
+	    (sink->type == PhysicalOperatorType::RESULT_COLLECTOR ||
+	     sink->type == PhysicalOperatorType::UNGROUPED_AGGREGATE || sink->type == PhysicalOperatorType::ORDER_BY)) {
 		auto &last_op = pipeline_p.operators.empty() ? *pipeline_p.source : pipeline_p.operators.back().get();
 		for (int i = 0; i < last_op.names.size(); i++) {
 			must_enable_columns_when_end.insert(last_op.names[i]);
