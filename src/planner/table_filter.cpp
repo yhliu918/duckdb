@@ -57,7 +57,11 @@ DynamicTableFilterSet::GetFinalTableFilters(const PhysicalTableScan &scan,
 	auto result = make_uniq<TableFilterSet>();
 	if (existing_filters) {
 		for (auto &entry : existing_filters->filters) {
-			result->filters[entry.first] = entry.second->Copy();
+			int col_id = entry.first;
+			int column_id = scan.column_ids_total[col_id];
+			int col_id_new =
+			    std::find(scan.column_ids.begin(), scan.column_ids.end(), column_id) - scan.column_ids.begin();
+			result->filters[col_id_new] = entry.second->Copy();
 		}
 	}
 	for (auto &entry : filters) {
