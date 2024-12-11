@@ -573,6 +573,7 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 			if (has_filters) {
 				D_ASSERT(ALLOW_UPDATES);
 				auto &filter_list = filter_info.GetFilterList();
+				const auto &column_ids_total = state.GetColumnIdsTotal();
 				for (idx_t i = 0; i < filter_list.size(); i++) {
 					auto filter_idx = adaptive_filter->permutation[i];
 					auto &filter = filter_list[filter_idx];
@@ -581,9 +582,13 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 						continue;
 					}
 					auto scan_idx = filter.scan_column_index;
+					int output_idx =
+					    std::find(column_ids_total.begin(), column_ids_total.end(), filter.table_column_index) -
+					    column_ids_total.begin();
+					// output_idx = scan_idx;
 					auto &col_data = GetColumn(filter.table_column_index);
 					col_data.Select(transaction, state.vector_index, state.column_scans[scan_idx],
-					                result.data[scan_idx], sel, approved_tuple_count, filter.filter);
+					                result.data[output_idx], sel, approved_tuple_count, filter.filter);
 				}
 				for (auto &table_filter : filter_list) {
 					if (table_filter.IsAlwaysTrue()) {
@@ -614,14 +619,13 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 			//! Now we use the selection vector to fetch data for the other columns.
 			int idx = 0;
 			for (idx_t i = 0; i < column_ids.size(); i++) {
-				if (has_filters && filter_info.ColumnHasFilters(i)) {
-					// column has already been scanned as part of the filtering process
+				while (result.disable_columns[idx] == 1) {
 					idx++;
 					continue;
 				}
-				if (result.disable_columns[idx] == 1) {
+				if (has_filters && filter_info.ColumnHasFilters(i)) {
+					// column has already been scanned as part of the filtering process
 					idx++;
-					i--;
 					continue;
 				}
 				auto column = column_ids[i];

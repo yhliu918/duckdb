@@ -133,7 +133,8 @@ class ScanFilterInfo {
 public:
 	~ScanFilterInfo();
 
-	void Initialize(TableFilterSet &filters, const vector<column_t> &column_ids);
+	void Initialize(TableFilterSet &filters, const vector<column_t> &column_ids,
+	                const vector<column_t> &column_ids_total = {});
 
 	const vector<ScanFilter> &GetFilterList() const {
 		return filter_list;
@@ -194,6 +195,7 @@ public:
 public:
 	void Initialize(const vector<LogicalType> &types);
 	const vector<storage_t> &GetColumnIds();
+	const vector<storage_t> &GetColumnIdsTotal();
 	ScanFilterInfo &GetFilterInfo();
 	TableScanOptions &GetOptions();
 	bool Select(DuckTransaction &transaction, DataChunk &result, idx_t rowid_col_idx,
@@ -242,15 +244,18 @@ public:
 	ScanFilterInfo filters;
 
 public:
-	void Initialize(vector<storage_t> column_ids, optional_ptr<TableFilterSet> table_filters = nullptr);
+	void Initialize(vector<storage_t> column_ids, optional_ptr<TableFilterSet> table_filters = nullptr,
+	                vector<column_t> column_ids_total_p = {});
 
 	const vector<storage_t> &GetColumnIds();
+	const vector<storage_t> &GetColumnIdsTotal();
 
 	ScanFilterInfo &GetFilterInfo();
 
 private:
 	//! The column identifiers of the scan
 	vector<storage_t> column_ids;
+	vector<storage_t> column_ids_total;
 };
 
 struct ParallelCollectionScanState {

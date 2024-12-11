@@ -19,16 +19,22 @@ TableScanState::TableScanState() : table_state(*this), local_state(*this) {
 TableScanState::~TableScanState() {
 }
 
-void TableScanState::Initialize(vector<column_t> column_ids_p, optional_ptr<TableFilterSet> table_filters) {
+void TableScanState::Initialize(vector<column_t> column_ids_p, optional_ptr<TableFilterSet> table_filters,
+                                vector<column_t> column_ids_total_p) {
 	this->column_ids = std::move(column_ids_p);
+	this->column_ids_total = std::move(column_ids_total_p);
 	if (table_filters) {
-		filters.Initialize(*table_filters, column_ids);
+		filters.Initialize(*table_filters, column_ids, column_ids_total);
 	}
 }
 
 const vector<column_t> &TableScanState::GetColumnIds() {
 	D_ASSERT(!column_ids.empty());
 	return column_ids;
+}
+
+const vector<column_t> &TableScanState::GetColumnIdsTotal() {
+	return column_ids_total;
 }
 
 ScanFilterInfo::~ScanFilterInfo() {
@@ -42,7 +48,8 @@ ScanFilter::ScanFilter(idx_t index, const vector<column_t> &column_ids, TableFil
     : scan_column_index(index), table_column_index(column_ids[index]), filter(filter), always_true(false) {
 }
 
-void ScanFilterInfo::Initialize(TableFilterSet &filters, const vector<column_t> &column_ids) {
+void ScanFilterInfo::Initialize(TableFilterSet &filters, const vector<column_t> &column_ids,
+                                const vector<column_t> &column_ids_total) {
 	D_ASSERT(!filters.filters.empty());
 	table_filters = &filters;
 	adaptive_filter = make_uniq<AdaptiveFilter>(filters);
@@ -139,7 +146,9 @@ void ColumnScanState::Next(idx_t count) {
 const vector<storage_t> &CollectionScanState::GetColumnIds() {
 	return parent.GetColumnIds();
 }
-
+const vector<storage_t> &CollectionScanState::GetColumnIdsTotal() {
+	return parent.GetColumnIdsTotal();
+}
 TableFilterSet &GetFilters();
 
 ScanFilterInfo &CollectionScanState::GetFilterInfo() {

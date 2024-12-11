@@ -97,7 +97,7 @@ public:
 	                          const PhysicalTableScan &op) {
 		if (op.function.init_local) {
 			TableFunctionInitInput input(op.bind_data.get(), op.column_ids, op.projection_ids,
-			                             gstate.GetTableFilters(op));
+			                             gstate.GetTableFilters(op), op.column_ids_total);
 			local_state = op.function.init_local(context, input, gstate.global_state.get());
 		}
 	}

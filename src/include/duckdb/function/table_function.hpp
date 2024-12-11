@@ -102,20 +102,26 @@ struct TableFunctionBindInput {
 
 struct TableFunctionInitInput {
 	TableFunctionInitInput(optional_ptr<const FunctionData> bind_data_p, const vector<column_t> &column_ids_p,
-	                       const vector<idx_t> &projection_ids_p, optional_ptr<TableFilterSet> filters_p)
-	    : bind_data(bind_data_p), column_ids(column_ids_p), projection_ids(projection_ids_p), filters(filters_p) {
+	                       const vector<idx_t> &projection_ids_p, optional_ptr<TableFilterSet> filters_p,
+	                       const vector<idx_t> &column_ids_total_p = vector<idx_t>())
+	    : bind_data(bind_data_p), column_ids(column_ids_p), projection_ids(projection_ids_p), filters(filters_p),
+	      column_ids_total(column_ids_total_p) {
 	}
 
 	optional_ptr<const FunctionData> bind_data;
 	const vector<column_t> &column_ids;
 	const vector<idx_t> projection_ids;
 	optional_ptr<TableFilterSet> filters;
+	const vector<column_t> &column_ids_total;
 
 	bool CanRemoveFilterColumns() const {
 		if (projection_ids.empty()) {
 			// Not set, can't remove filter columns
 			return false;
 		} else if (projection_ids.size() == column_ids.size()) {
+			// Filter column is used in remainder of plan, can't remove
+			return false;
+		} else if (projection_ids.size() == column_ids_total.size()) {
 			// Filter column is used in remainder of plan, can't remove
 			return false;
 		} else {

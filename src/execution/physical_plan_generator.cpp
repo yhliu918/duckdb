@@ -455,6 +455,11 @@ std::vector<std::string> PhysicalPlanGenerator::PrintOperatorCatalog(const uniqu
 				break;
 			}
 		}
+		if (table_scan.table_filters) {
+			for (auto &[col_idx, _] : table_scan.table_filters->filters) {
+				table_scan.must_enables_left.push_back(table_scan.names[table_scan.column_ids_total[col_idx]]);
+			}
+		}
 		if (!has_disabled) {
 			for (int i = 0; i < table_scan.projection_ids.size(); i++) {
 				op_str.push_back(table_scan.names[table_scan.column_ids_total[table_scan.projection_ids[i]]]);

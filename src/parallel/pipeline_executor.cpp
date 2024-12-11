@@ -93,6 +93,12 @@ void PipelineExecutor::dump_pipeline_info(Pipeline &pipeline_p) {
 	json j;
 	int op_index = 0;
 	for (auto &op : pipeline_p.GetOperators()) {
+		if (op.get().type == PhysicalOperatorType::TABLE_SCAN) {
+			auto &table_scan = op.get().Cast<PhysicalTableScan>();
+			for (auto &name : table_scan.must_enables_left) {
+				must_enable_columns_when_start.insert(name);
+			}
+		}
 		if (op.get().type == PhysicalOperatorType::HASH_JOIN) {
 			if (&op.get() != pipeline_p.GetSink().get()) {
 				//! is probe side
@@ -166,7 +172,7 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 			dump_pipeline_info(pipeline);
 		}
 
-		// std::cout << pipeline.pipeline_id << " " << pipeline.parent << " " << pipeline.ToString() << std::endl;
+		std::cout << pipeline.pipeline_id << " " << pipeline.parent << " " << pipeline.ToString() << std::endl;
 	}
 	bool mat_mode = parse_materialize_config(pipeline, false);
 	if (pipeline.sink) {
