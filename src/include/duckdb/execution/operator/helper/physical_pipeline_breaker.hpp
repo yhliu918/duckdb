@@ -16,16 +16,29 @@
 #include "duckdb/common/thread.hpp"
 #include "lightweightsemaphore.h"
 
+#include "duckdb/common/types/column/column_data_collection_segment.hpp"
+
 namespace duckdb {
 
-typedef duckdb_moodycamel::ConcurrentQueue<duckdb::DataChunk> concurrent_queue_t;
+class ChunkBuffer;
+
+struct ChunkReference {
+	shared_ptr<ChunkBuffer> buffer;
+	ChunkMetaData chunk_meta;
+};
+
+typedef duckdb_moodycamel::ConcurrentQueue<ChunkReference> concurrent_queue_t;
 typedef duckdb_moodycamel::LightweightSemaphore lightweight_semaphore_t;
 
 struct ConcurrentQueue {
+public:
+	void Enqueue(ChunkReference &&chunk_ref);
+	bool TryDequeue(ChunkReference &chunk_ref);
+	void Finalize();
+
+private:
 	concurrent_queue_t q;
 	lightweight_semaphore_t semaphore;
-
-	void Enqueue(DataChunk &&chunk);
 };
 
 //! PhysicalPipelineBreaker represents a physical operator that is used to break up pipelines
@@ -44,6 +57,9 @@ public:
 	SinkFinalizeType Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
 	                          OperatorSinkFinalizeInput &input) const override;
 
+	unique_ptr<LocalSinkState> GetLocalSinkState(ExecutionContext &context) const override;
+	SinkCombineResultType Combine(ExecutionContext &context, OperatorSinkCombineInput &input) const override;
+
 	bool IsSink() const override {
 		return true;
 	}
@@ -52,7 +68,8 @@ public:
 	}
 
 public:
-	// Source interface
+	unique_ptr<LocalSourceState> GetLocalSourceState(ExecutionContext &context,
+	                                                 GlobalSourceState &gstate) const override;
 	unique_ptr<GlobalSourceState> GetGlobalSourceState(ClientContext &context) const override;
 
 	SourceResultType GetData(ExecutionContext &context, DataChunk &chunk, OperatorSourceInput &input) const override;

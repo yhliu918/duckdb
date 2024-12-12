@@ -211,7 +211,10 @@ static inline void GetRowPointersInternal(DataChunk &keys, TupleDataChunkState &
 	idx_t &match_count = count;
 	match_count = 0;
 
+	idx_t round = 0;
+
 	while (remaining_count > 0) {
+		round++;
 		idx_t salt_match_count = 0;
 		idx_t key_no_match_count = 0;
 
@@ -261,6 +264,29 @@ static inline void GetRowPointersInternal(DataChunk &keys, TupleDataChunkState &
 			idx_t key_match_count = ht->row_matcher_build.Match(keys, key_state.vector_data, state.salt_match_sel,
 			                                                    salt_match_count, ht->layout, state.rhs_row_locations,
 			                                                    &state.key_no_match_sel, key_no_match_count);
+			static atomic<int> exit_tag;
+			if (key_no_match_count > 10 && exit_tag.fetch_add(1) == 0) {
+				std::cerr << "CPU " << sched_getcpu() << std::endl;
+				for (int row_index = 0; row_index < 2048; row_index++) {
+					auto &ht_offset = ht_offsets[row_index];
+					auto entry = entries[ht_offset];
+					auto entry_ptr = entry.GetPointer();
+					uint8_t *ptr = row_ptr_insert_to[row_index];
+					bool *valid_ptr = reinterpret_cast<bool*>(ptr);
+					uint32_t *build_key_ptr = reinterpret_cast<uint32_t*>(ptr + 1);
+					uint64_t *rowid_ptr = reinterpret_cast<uint64_t*>(ptr + 5);
+					auto probe_key = keys.data[0].GetValue(row_index).GetValue<uint32_t>();
+					std::cerr << *build_key_ptr << " " << probe_key << " " << *rowid_ptr << " "
+							  << row_index << " " << salts[row_index] << " " << entry.GetSalt() << " "
+							  << *reinterpret_cast<uint64_t*>(&entry_ptr) << " " << *reinterpret_cast<uint64_t*>(&ptr) << "\n";
+					std::cerr << (hashes[row_index] | 0x0000FFFFFFFFFFFF) << " ";
+					std::cerr << hashes[row_index] << " ";
+					std::cerr << duckdb::Hash<uint32_t>(probe_key) << "\n";
+				}
+				std::cerr << "unmatch " + to_string(key_match_count) + " " + to_string(key_no_match_count) + " "
+						   + to_string(ht->finalized) + " " + to_string(count) + " " + to_string(round) + "\n";
+				exit(0);
+			}
 
 			D_ASSERT(key_match_count + key_no_match_count == salt_match_count);
 

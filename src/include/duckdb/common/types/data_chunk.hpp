@@ -49,7 +49,6 @@ public:
 	DUCKDB_API ~DataChunk();
 
 	DataChunk(DataChunk &&chunk_p);
-	DataChunk(DataChunk &chunk_p);
 	DataChunk& operator=(DataChunk &&chunk_p);
 
 	//! The vectors owned by the DataChunk.

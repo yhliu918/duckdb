@@ -11,7 +11,7 @@ using namespace duckdb;
 int print_tag = 0;
 int numa_tag = 1;
 int parallel_build_tag = 1;
-int split_probe_tag = 0;
+int split_probe_tag = 1;
 int debug_tag = 0;
 double query_start;
 double prepare_payloads_end;
@@ -60,9 +60,9 @@ int main(int argc, char *argv[]) {
 	con.Query(query);
 	duckdb::Printer::Print("start query");
 	std::cout << "start query\n";
+	debug_tag = 1;
 	query_start = getNow();
 	__itt_resume();
-	debug_tag = 1;
 	auto result = con.Query(query);
 	__itt_pause();
 	probe_end = getNow();
@@ -71,7 +71,25 @@ int main(int argc, char *argv[]) {
 
 	// std::cout << con.Query("explain " + query)->Fetch()->GetValue(1, 0).GetValue<string>() << std::endl;
 	std::cout << prepare_payloads_end - query_start << " " << init_pointer_table_end - prepare_payloads_end << " "
-			<< build_end - init_pointer_table_end << " " << probe_end - build_end << " " << probe_end - query_start << std::endl;
+			  << build_end - init_pointer_table_end << " " << probe_end - build_end << " " << probe_end - query_start << std::endl;
 	std::cerr << prepare_payloads_end - query_start << " " << init_pointer_table_end - prepare_payloads_end << " "
-			<< build_end - init_pointer_table_end << " " << probe_end - build_end << " " << probe_end - query_start << std::endl;
+			  << build_end - init_pointer_table_end << " " << probe_end - build_end << " " << probe_end - query_start << std::endl;
+
+
+	std::vector<std::pair<uint64_t, uint64_t>> results;
+	while (1) {
+		auto chunk = result->Fetch();
+		if (chunk == nullptr) {
+			break;
+		}
+		for (idx_t i = 0; i < chunk->size(); i++) {
+			results.emplace_back(chunk->GetValue(0, i).GetValue<uint64_t>(), chunk->GetValue(1, i).GetValue<uint64_t>());
+		}
+	}
+
+	uint64_t checksum = 0;
+	for (auto [a, b] : results) {
+		checksum += a * b;
+	}
+	std::cout << checksum << std::endl;
 }
