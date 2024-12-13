@@ -136,6 +136,9 @@ void DataChunk::Copy(DataChunk &other, idx_t offset) const {
 	D_ASSERT(other.size() == 0);
 
 	for (idx_t i = 0; i < ColumnCount(); i++) {
+		if (disable_columns[i] == 1) {
+			continue;
+		}
 		D_ASSERT(other.data[i].GetVectorType() == VectorType::FLAT_VECTOR);
 		VectorOperations::Copy(data[i], other.data[i], size(), offset, 0);
 	}

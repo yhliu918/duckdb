@@ -72,6 +72,7 @@ public:
 
 	std::unordered_map<int, int> result_index;
 
+	std::vector<unique_ptr<DataChunk>> chunk_queue_ptr;
 	std::vector<DataChunk *> chunk_queue; // queue of chunks to be processed(materialized)
 	int chunk_counter = 0;
 
@@ -84,6 +85,7 @@ private:
 	ExecutionContext context;
 
 	//! Intermediate chunks for the operators
+	vector<unique_ptr<DataChunk>> source_chunks;
 	vector<unique_ptr<DataChunk>> intermediate_chunks;
 	vector<unique_ptr<DataChunk>> final_chunks;
 	//! Intermediate states for the operators

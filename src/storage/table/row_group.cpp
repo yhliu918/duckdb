@@ -594,7 +594,10 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 					if (table_filter.IsAlwaysTrue()) {
 						continue;
 					}
-					result.data[table_filter.scan_column_index].Slice(sel, approved_tuple_count);
+					int output_idx =
+					    std::find(column_ids_total.begin(), column_ids_total.end(), table_filter.table_column_index) -
+					    column_ids_total.begin();
+					result.data[output_idx].Slice(sel, approved_tuple_count);
 				}
 			}
 			if (approved_tuple_count == 0) {
@@ -620,6 +623,7 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 			int idx = 0;
 			for (idx_t i = 0; i < column_ids.size(); i++) {
 				while (result.disable_columns[idx] == 1) {
+					result.data[idx].Slice(sel, approved_tuple_count);
 					idx++;
 					continue;
 				}
@@ -642,6 +646,9 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 					if (TYPE == TableScanType::TABLE_SCAN_REGULAR) {
 						col_data.FilterScan(transaction, state.vector_index, state.column_scans[i], result.data[idx],
 						                    sel, approved_tuple_count);
+						// for (int j = 0; j < approved_tuple_count; j++) {
+						// 	std::cout << sel.get_index(j) << std::endl;
+						// }
 					} else {
 						col_data.FilterScanCommitted(state.vector_index, state.column_scans[i], result.data[idx], sel,
 						                             approved_tuple_count, ALLOW_UPDATES);

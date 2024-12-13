@@ -607,6 +607,30 @@ void TupleDataCollection::Scatter(TupleDataChunkState &chunk_state, const DataCh
 void TupleDataCollection::Scatter(TupleDataChunkState &chunk_state, const Vector &source, const column_t column_id,
                                   const SelectionVector &append_sel, const idx_t append_count) const {
 	const auto &scatter_function = scatter_functions[column_id];
+	if (source.GetType() == LogicalType::VARCHAR) {
+		const auto &source_data = chunk_state.vector_data[column_id].unified;
+		const auto &source_sel = *source_data.sel;
+		const auto data = UnifiedVectorFormat::GetData<string_t>(source_data);
+		const auto &validity = source_data.validity;
+
+		// Target
+		const auto target_locations = FlatVector::GetData<data_ptr_t>(chunk_state.row_locations);
+		const auto target_heap_locations = FlatVector::GetData<data_ptr_t>(chunk_state.heap_locations);
+
+		// Precompute mask indexes
+		idx_t entry_idx;
+		idx_t idx_in_entry;
+		ValidityBytes::GetEntryIndex(column_id, entry_idx, idx_in_entry);
+
+		const auto offset_in_row = layout.GetOffsets()[column_id];
+		if (validity.AllValid()) {
+			for (idx_t i = 0; i < append_count; i++) {
+				const auto source_idx = source_sel.get_index(append_sel.get_index(i));
+				// std::cout << append_sel.get_index(i) << " source idx " << source_idx << " "
+				//           << data[source_idx].GetString() << std::endl;
+			}
+		}
+	}
 	scatter_function.function(source, chunk_state.vector_data[column_id], append_sel, append_count, layout,
 	                          chunk_state.row_locations, chunk_state.heap_locations, column_id,
 	                          chunk_state.vector_data[column_id].unified, scatter_function.child_functions);
