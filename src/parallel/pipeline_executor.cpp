@@ -172,7 +172,7 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 			dump_pipeline_info(pipeline);
 		}
 
-		std::cout << pipeline.pipeline_id << " " << pipeline.parent << " " << pipeline.ToString() << std::endl;
+		// std::cout << pipeline.pipeline_id << " " << pipeline.parent << " " << pipeline.ToString() << std::endl;
 	}
 	bool mat_mode = parse_materialize_config(pipeline, false);
 	if (pipeline.sink) {
@@ -267,7 +267,6 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 	if (pipeline.materialize_strategy_mode == 1) {
 		int row_id_column_number = pipeline.materialize_maps.size();
 		for (auto &[rowid_col_idx, mat_map] : pipeline.materialize_maps) {
-			inverted_indexnew[rowid_col_idx].reserve(500);
 			inverted_indexnew[rowid_col_idx].resize(500);
 			for (auto &[colid, type] : mat_map.materialize_column_types) {
 				pipeline.final_materialize_column_types[colid] = type;
@@ -277,13 +276,6 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 	}
 
 	InitializeChunk(final_chunk);
-	// if (pipeline.pipeline_id) {
-	// 	std::cout << "final chunk ";
-	// 	for (auto &type : final_chunk.GetTypes()) {
-	// 		std::cout << type.ToString() << " ";
-	// 	}
-	// 	std::cout << std::endl;
-	// }
 	if (pipeline.materialize_strategy_mode == 1) {
 		for (int i = 0; i < pipeline.chunk_queue_threshold; i++) {
 			auto chunk = make_uniq<DataChunk>();
@@ -291,7 +283,20 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 			chunk->disable_columns = final_chunk.disable_columns;
 
 			final_chunks.push_back(std::move(chunk));
+
+			auto chunk_new = make_uniq<DataChunk>();
+			chunk_new->Initialize(Allocator::Get(context.client), final_chunk.GetTypes());
+			chunk_new->disable_columns = final_chunk.disable_columns;
+			chunk_queue_ptr.push_back(std::move(chunk_new));
 		}
+	}
+	int source_chunk_num = pipeline.chunk_queue_threshold > 0 ? pipeline.chunk_queue_threshold : 1;
+	for (int i = 0; i < source_chunk_num; i++) {
+		auto source_chunk = make_uniq<DataChunk>();
+		source_chunk->Initialize(Allocator::Get(context.client), pipeline.source->GetTypes());
+		source_chunk->disable_columns = pipeline.source->disable_columns;
+
+		source_chunks.push_back(std::move(source_chunk));
 	}
 }
 
@@ -414,8 +419,9 @@ SinkNextBatchType PipelineExecutor::NextBatch(duckdb::DataChunk &source_chunk) {
 
 PipelineExecuteResult PipelineExecutor::Execute(idx_t max_chunks) {
 	D_ASSERT(pipeline.sink);
-	auto &source_chunk = pipeline.operators.empty() ? final_chunk : *intermediate_chunks[0];
+
 	for (idx_t i = 0; i < max_chunks; i++) {
+		auto &source_chunk = pipeline.operators.empty() ? final_chunk : *source_chunks[chunk_counter];
 		double start = getNow();
 		if (context.client.interrupted) {
 			throw InterruptException();
@@ -538,7 +544,7 @@ void PipelineExecutor::FlushQueuedChunks() {
 	std::unordered_map<int, int> mat_col_write_idx;
 	for (auto &[rowid_col_idx, mat_map] : pipeline.materialize_maps) {
 		for (auto &[col_idx, result_col_index] : mat_map.materialize_column_ids) {
-			types.push_back(chunk_queue[0]->data[result_col_index].GetType());
+			types.push_back(chunk_queue_ptr[0]->data[result_col_index].GetType());
 			mat_col_write_idx[result_col_index] = types.size() - 1;
 		}
 	}
@@ -596,7 +602,7 @@ void PipelineExecutor::FlushQueuedChunks() {
 
 	// slice the mat_chunk into these chunks
 	int start = 0;
-	for (auto chunk : chunk_queue) {
+	for (auto &chunk : chunk_queue_ptr) {
 		// chunk->disable_columns = last_op.output_disable_columns;
 		for (auto &[chunk_col_idx, mat_col_idx] : mat_result_write_back) {
 			chunk->data[chunk_col_idx].Slice(mat_chunk.data[mat_col_idx], start, start + chunk->size());
@@ -639,7 +645,10 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 
 			double materialize_start = getNow();
 			if (pipeline.materialize_strategy_mode == 1) {
-				chunk_queue.emplace_back(&sink_chunk);
+				chunk_queue_ptr[chunk_counter]->Reset();
+				sink_chunk.Copy(*chunk_queue_ptr[chunk_counter]);
+				// chunk_queue_ptr[chunk_counter]->Copy(sink_chunk);
+				// chunk_queue.emplace_back(&sink_chunk);
 				chunk_counter++;
 				// build inverted index
 				for (auto &[rowid_col_idx, mat_map] : pipeline.materialize_maps) {
@@ -661,7 +670,7 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 						// auto rowid = sel[i];
 						auto rowid = use_sel_index ? sel[sel_index->get_index(i)] : sel[i];
 						assert(rowid / STANDARD_ROW_GROUPS_SIZE < 500);
-						// std::cout << rowid << std::endl;
+						// std::cout << sel_index->get_index(i) << " " << rowid << std::endl;
 						inverted_indexnew[rowid_col_idx][rowid / STANDARD_ROW_GROUPS_SIZE].emplace_back(
 						    std::make_pair(rowid, index++));
 					}
@@ -673,7 +682,6 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 			//! materialize the current chunk queue and sink them all.
 			if (pipeline.materialize_strategy_mode == 1 && chunk_counter >= pipeline.chunk_queue_threshold) {
 				double materialize_start = getNow();
-
 				// materialize the inverted index columns
 				if (result_index.begin()->second > 0) {
 					FlushQueuedChunks();
@@ -682,7 +690,7 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 				pipeline.mat_operator_time += materialize_end - materialize_start;
 
 				// sink all the chunks
-				for (auto chunk : chunk_queue) {
+				for (auto &chunk : chunk_queue_ptr) {
 					OperatorSinkInput sink_input {*pipeline.sink->sink_state,
 					                              *local_sink_state,
 					                              interrupt_state,
@@ -695,14 +703,13 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 							sink_input.colid_keep_rowid[rowid] = mat_map.keep_rowid;
 						}
 					}
-					// std::cout << chunk->size() << std::endl;
 					double sink_start = getNow();
 					sink_result = Sink(*chunk, sink_input);
 					double sink_end = getNow();
 					pipeline.incrementOperatorTime(sink_end - sink_start, pipeline.operators.size());
 				}
 
-				chunk_queue.clear();
+				// chunk_queue.clear();
 				chunk_counter = 0;
 				for (auto it = inverted_indexnew.begin(); it != inverted_indexnew.end(); it++) {
 					for (auto it2 = it->second.begin(); it2 != it->second.end(); it2++) {
@@ -752,7 +759,9 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 		pipeline.mat_operator_time += materialize_end - materialize_start;
 
 		// sink all the chunks
-		for (auto chunk : chunk_queue) {
+		for (int i = 0; i < chunk_counter; i++) {
+			auto &chunk = chunk_queue_ptr[i];
+			// std::cout << "chunk size: " << chunk->size() << std::endl;
 			OperatorSinkInput sink_input {*pipeline.sink->sink_state,
 			                              *local_sink_state,
 			                              interrupt_state,
@@ -765,14 +774,13 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 					sink_input.colid_keep_rowid[rowid] = mat_map.keep_rowid;
 				}
 			}
-			// std::cout << chunk->size() << std::endl;
 			double sink_start = getNow();
 			auto sink_result = Sink(*chunk, sink_input);
 			double sink_end = getNow();
 			pipeline.incrementOperatorTime(sink_end - sink_start, pipeline.operators.size());
 		}
 
-		chunk_queue.clear();
+		// chunk_queue.clear();
 		chunk_counter = 0;
 		for (auto it = inverted_indexnew.begin(); it != inverted_indexnew.end(); it++) {
 			it->second.clear();
@@ -827,7 +835,7 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 	}
 
 	bool print = pipeline.operators.size() > 0 || pipeline.sink->type != PhysicalOperatorType::CREATE_TABLE_AS;
-	// print = false;
+	print = false;
 	if (print) {
 		std::cout << "----------------------------" << std::endl;
 		for (int i = 0; i < pipeline.operator_total_time.size() - 1; i++) {
@@ -1028,7 +1036,16 @@ SourceResultType PipelineExecutor::FetchFromSource(DataChunk &result) {
 
 	OperatorSourceInput source_input = {*pipeline.source_state, *local_source_state, interrupt_state};
 	auto res = GetData(result, source_input);
-
+	// if (pipeline.pipeline_id == 2 &&
+	//     result.data[1].GetBuffer().get()->GetBufferType() == VectorBufferType::DICTIONARY_BUFFER) {
+	// 	auto buffer = result.data[1].GetBuffer().get();
+	// 	DictionaryBuffer *dict_buffer = static_cast<DictionaryBuffer *>(buffer);
+	// 	auto sel_index = &dict_buffer->GetSelVector();
+	// 	auto val = reinterpret_cast<int32_t *>(result.data[1].GetData());
+	// 	for (int i = 0; i < result.size(); i++) {
+	// 		std::cout << sel_index->get_index(i) << " " << val[sel_index->get_index(i)] << std::endl;
+	// 	}
+	// }
 	// Ensures Sinks only return empty results when Blocking or Finished
 	D_ASSERT(res != SourceResultType::BLOCKED || result.size() == 0);
 

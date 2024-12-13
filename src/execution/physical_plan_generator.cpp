@@ -289,8 +289,8 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalOperator &
 		}
 	}
 
-	std::string op_str = PrintOperator(plan);
-	std::cout << op_str << std::endl;
+	// std::string op_str = PrintOperator(plan);
+	// std::cout << op_str << std::endl;
 	if (!plan) {
 		throw InternalException("Physical plan generator - no plan generated");
 	}

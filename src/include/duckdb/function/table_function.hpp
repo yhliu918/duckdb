@@ -121,9 +121,7 @@ struct TableFunctionInitInput {
 		} else if (projection_ids.size() == column_ids.size()) {
 			// Filter column is used in remainder of plan, can't remove
 			return false;
-		} else if (projection_ids.size() == column_ids_total.size()) {
-			// Filter column is used in remainder of plan, can't remove
-			return false;
+
 		} else {
 			// Less columns need to be projected out than that we scan
 			return true;
