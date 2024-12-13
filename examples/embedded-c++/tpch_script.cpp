@@ -154,16 +154,16 @@ find_materialize_position(std::vector<std::string> attribute, std::unordered_map
 					    parent.contains("must_enable_columns_end")
 					        ? parent["must_enable_columns_end"].get<std::vector<std::string>>()
 					        : std::vector<std::string>();
+					if (std::find(must_enable_columns_start.begin(), must_enable_columns_start.end(), attr_) !=
+					    must_enable_columns_start.end()) {
+						//! cannot be materialized in this pipeline
+						break;
+					}
 					if (std::find(must_enable_columns_end.begin(), must_enable_columns_end.end(), attr_) !=
 					    must_enable_columns_end.end()) {
-						if (std::find(must_enable_columns_start.begin(), must_enable_columns_start.end(), attr_) !=
-						    must_enable_columns_start.end()) {
-							//! cannot be materialized in this pipeline
-							break;
-						} else {
-							possible_mat_pos[attr].push_back(pipeline_id);
-							break;
-						}
+
+						possible_mat_pos[attr].push_back(pipeline_id);
+						break;
 					}
 
 					possible_mat_pos[attr].push_back(pipeline_id);
