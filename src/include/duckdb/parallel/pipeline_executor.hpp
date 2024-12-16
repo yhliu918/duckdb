@@ -54,6 +54,8 @@ public:
 
 	void FlushQueuedChunks();
 
+	void InplaceMaterializeChunk(DataChunk &chunk);
+
 	bool RemainingSinkChunk() const;
 
 	//! Initializes a chunk with the types that will flow out of the chunk
@@ -75,6 +77,8 @@ public:
 	std::vector<unique_ptr<DataChunk>> chunk_queue_ptr;
 	std::vector<DataChunk *> chunk_queue; // queue of chunks to be processed(materialized)
 	int chunk_counter = 0;
+	int total_materialized_chunks = 0;
+	int total_materialized_rows = 0;
 
 private:
 	//! The pipeline to process

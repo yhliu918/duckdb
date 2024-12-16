@@ -1,6 +1,7 @@
 import re
 import sys
 import glob
+from collections import Counter
 
 def parse_sql(sql):
     # 将大写的 FROM 替换为小写
@@ -12,18 +13,25 @@ def parse_sql(sql):
     
     sql = re.sub(r'\bFROM\b', 'from', sql, flags=re.IGNORECASE)
 
+    
     # 查找所有的表名和别名
     table_aliases = re.findall(r'(\w+)\s+AS\s+(\w+)', sql, flags=re.IGNORECASE)
-    
-    # 去掉 from 和 where 之间的表别名
+
+    # 统计每个表名出现的次数
+    table_counts = Counter(table for table, alias in table_aliases)
+
+    # 去掉 from 和 where 之间的表别名，只处理出现次数为 1 的表名
     for table, alias in table_aliases:
-        sql = re.sub(r'\b' + table + r'\s+AS\s+' + alias + r'\b', table, sql, flags=re.IGNORECASE)
-    
+        if table_counts[table] == 1:
+            sql = re.sub(r'\b' + table + r'\s+AS\s+' + alias + r'\b', table, sql, flags=re.IGNORECASE)
+
     # 替换所有的表别名为表名
     for table, alias in table_aliases:
-        sql = re.sub(r'\b' + alias + r'\.', table + '.', sql, flags=re.IGNORECASE)
+        if table_counts[table] == 1:
+            sql = re.sub(r'\b' + alias + r'\.', table + '.', sql, flags=re.IGNORECASE)
 
-    sql = re.sub(r'\bAS\s+\w+\b', '', sql, flags=re.IGNORECASE)
+
+    # sql = re.sub(r'\bAS\s+\w+\b', '', sql, flags=re.IGNORECASE)
 
     return sql
 

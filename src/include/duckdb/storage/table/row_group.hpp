@@ -125,8 +125,6 @@ public:
 	               std::unordered_map<int64_t, int64_t> &project_column_ids,
 	               std::unordered_map<int64_t, int32_t> &fixed_len_strings_columns, int64_t result_rowid,
 	               ColumnFetchState &cfs);
-	void GetScalarCol(TransactionData transaction, CollectionScanState &state, Vector &result, uint64_t row_id,
-	                  int64_t col_idx, int64_t result_rowid, ColumnFetchState &cfs);
 	void ScanCommitted(CollectionScanState &state, DataChunk &result, TableScanType type);
 
 	idx_t GetSelVector(TransactionData transaction, idx_t vector_idx, SelectionVector &sel_vector, idx_t max_count);

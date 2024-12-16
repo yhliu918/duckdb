@@ -9,7 +9,7 @@
 
 using namespace duckdb;
 using json = nlohmann::json;
-#define QUEUE_THR 300
+#define QUEUE_THR 25
 
 bool file_exists(const std::string &path) {
 	struct stat buffer;
@@ -174,7 +174,8 @@ find_materialize_position(std::vector<std::string> attribute, std::unordered_map
 
 void write_materialize_config(std::unordered_map<int, std::vector<std::string>> &materialize_config,
                               std::unordered_map<int, bool> &push_source,
-                              unordered_map<std::string, int> &from_pipeline, std::vector<std::string> attribute) {
+                              unordered_map<std::string, int> &from_pipeline, std::vector<std::string> attribute,
+                              int materialize_strategy_mode = 1) {
 	for (json::iterator it = schema.begin(); it != schema.end(); ++it) {
 		std::ofstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/table" + it.key(),
 		                   std::ios::out);
@@ -229,7 +230,7 @@ void write_materialize_config(std::unordered_map<int, std::vector<std::string>> 
 			push_src = push_source[pos];
 		}
 
-		pipeline_file << "1 " << push_src << " " << QUEUE_THR << std::endl;
+		pipeline_file << materialize_strategy_mode << " " << push_src << " " << QUEUE_THR << std::endl;
 		pipeline_file << from_pipeline_to_attr.size() << std::endl;
 		for (auto &[pipeline, attrs] : from_pipeline_to_attr) {
 			//! fix me: keep_rowid is 1 for now
@@ -292,6 +293,7 @@ int main(int argc, char *argv[]) {
 		query += line + " ";
 	}
 	// std::cout << query << std::endl;
+
 	bool dump = false;
 	if (argc > 5) {
 		dump = std::stoi(argv[5]);
@@ -310,6 +312,11 @@ int main(int argc, char *argv[]) {
 	}
 
 	std::string mat_file = materialize_info + std::to_string(mat_info_id);
+
+	int mat_strategy = 0;
+	if (argc > 7) {
+		mat_strategy = std::stoi(argv[7]);
+	}
 
 	// std::cout << "Warning: will remove all content files in the config directory first" << std::endl;
 	std::string command = "rm " + config_directory + "*";
@@ -339,7 +346,7 @@ int main(int argc, char *argv[]) {
 
 	if (dump) {
 		double start = getNow();
-		std::cout << query << std::endl;
+		// std::cout << query << std::endl;
 		auto result = con.Query(query);
 		double end = getNow();
 		if (print_result) {
@@ -419,7 +426,7 @@ int main(int argc, char *argv[]) {
 		std::string command = "rm " + config_directory + "*";
 		int cmd_result = system(command.c_str());
 	}
-	write_materialize_config(materialize_pos, push_source, from_pipeline, materialize_keys);
+	write_materialize_config(materialize_pos, push_source, from_pipeline, materialize_keys, mat_strategy);
 
 	double start = getNow();
 	auto result = con.Query(query);

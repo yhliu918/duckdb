@@ -276,7 +276,7 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 	}
 
 	InitializeChunk(final_chunk);
-	if (pipeline.materialize_strategy_mode == 1) {
+	if (pipeline.materialize_strategy_mode > 0) {
 		for (int i = 0; i < pipeline.chunk_queue_threshold; i++) {
 			auto chunk = make_uniq<DataChunk>();
 			chunk->Initialize(Allocator::Get(context.client), final_chunk.GetTypes());
@@ -536,7 +536,7 @@ bool PipelineExecutor::IsFinished() {
 }
 
 void PipelineExecutor::FlushQueuedChunks() {
-
+	assert(pipeline.materialize_strategy_mode == 1);
 	auto &last_op = pipeline.operators.empty() ? *pipeline.source : pipeline.operators.back().get();
 	int origin_output_count = last_op.GetTypes().size();
 
@@ -595,10 +595,6 @@ void PipelineExecutor::FlushQueuedChunks() {
 		}
 	}
 	mat_chunk.SetCardinality(result_index.begin()->second);
-	// int64_t *val = reinterpret_cast<int64_t *>(mat_chunk.data[0].GetData());
-	// for (int i = 0; i < mat_chunk.size(); i++) {
-	// 	std::cout << val[i] << " ";
-	// }
 
 	// slice the mat_chunk into these chunks
 	int start = 0;
@@ -608,6 +604,37 @@ void PipelineExecutor::FlushQueuedChunks() {
 			chunk->data[chunk_col_idx].Slice(mat_chunk.data[mat_col_idx], start, start + chunk->size());
 		}
 		start += chunk->size();
+	}
+}
+
+void PipelineExecutor::InplaceMaterializeChunk(DataChunk &chunk) {
+	assert(pipeline.materialize_strategy_mode == 2);
+	for (auto &[rowid_col_idx, mat_map] : pipeline.materialize_maps) {
+		if (mat_map.source_pipeline_id == pipeline.pipeline_id) {
+			OperatorSourceInput source_input = {*pipeline.source_state,
+			                                    *local_source_state,
+			                                    interrupt_state,
+			                                    true,
+			                                    rowid_col_idx,
+			                                    mat_map.materialize_column_ids,
+			                                    mat_map.fixed_len_strings_columns,
+			                                    false};
+
+			auto res = pipeline.source->GetData(context, chunk, source_input);
+		} else {
+			auto &mat_source = pipeline.materialize_sources[mat_map.source_pipeline_id];
+
+			OperatorSourceInput source_input = {*mat_source.materialize_source_state,
+			                                    *mat_source.materialize_local_source_state,
+			                                    interrupt_state,
+			                                    true,
+			                                    rowid_col_idx,
+			                                    mat_map.materialize_column_ids,
+			                                    mat_map.fixed_len_strings_columns,
+			                                    false};
+
+			auto res = mat_source.materialize_source->GetData(context, chunk, source_input);
+		}
 	}
 }
 
@@ -705,6 +732,8 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 					}
 					double sink_start = getNow();
 					sink_result = Sink(*chunk, sink_input);
+					total_materialized_chunks++;
+					total_materialized_rows += chunk->size();
 					double sink_end = getNow();
 					pipeline.incrementOperatorTime(sink_end - sink_start, pipeline.operators.size());
 				}
@@ -721,9 +750,21 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 				}
 			}
 
+			//! TODO: Add materialize strategy 2
+
+			if (pipeline.materialize_strategy_mode == 2) {
+				// materialize the chunk in place
+				double materialize_start = getNow();
+				InplaceMaterializeChunk(sink_chunk);
+				double materialize_end = getNow();
+				pipeline.mat_operator_time += materialize_end - materialize_start;
+			}
+
 			if (!pipeline.materialize_flag || pipeline.materialize_strategy_mode != 1) {
 				double sink_start = getNow();
 				sink_result = Sink(sink_chunk, sink_input);
+				total_materialized_chunks++;
+				total_materialized_rows += sink_chunk.size();
 				double sink_end = getNow();
 				pipeline.incrementOperatorTime(sink_end - sink_start, pipeline.operators.size());
 			}
@@ -776,6 +817,8 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 			}
 			double sink_start = getNow();
 			auto sink_result = Sink(*chunk, sink_input);
+			total_materialized_chunks++;
+			total_materialized_rows += chunk->size();
 			double sink_end = getNow();
 			pipeline.incrementOperatorTime(sink_end - sink_start, pipeline.operators.size());
 		}
@@ -835,7 +878,7 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 	}
 
 	bool print = pipeline.operators.size() > 0 || pipeline.sink->type != PhysicalOperatorType::CREATE_TABLE_AS;
-	print = false;
+	print = true;
 	if (print) {
 		std::cout << "----------------------------" << std::endl;
 		for (int i = 0; i < pipeline.operator_total_time.size() - 1; i++) {
@@ -852,6 +895,8 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 				std::cout << "Map building time: " << pipeline.map_building_time << std::endl;
 			}
 			std::cout << "Materialize operator time: " << pipeline.mat_operator_time << std::endl;
+			std::cout << "Total materialized chunks: " << total_materialized_chunks << std::endl;
+			std::cout << "Total materialized rows: " << total_materialized_rows << std::endl;
 		}
 		std::cout << "----------------------------" << std::endl;
 		std::cout << "Total time: " << pipeline.total_time << std::endl;
@@ -918,38 +963,6 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 			                                          *intermediate_states[current_intermediate - 1]);
 			double op_end = getNow();
 			pipeline.incrementOperatorTime(op_end - op_start, operator_idx);
-			// FIX me: if we need to support materialize strategy 0
-			//  if (pipeline.materialize_flag && operator_idx == pipeline.operators.size() - 1 &&
-			//      pipeline.materialize_strategy_mode == 0) {
-			//  	double mat_start = getNow();
-			//  	OperatorSourceInput source_input = {*pipeline.materialize_source_state,
-			//  	                                    *pipeline.materialize_local_source_state,
-			//  	                                    interrupt_state,
-			//  	                                    true,
-			//  	                                    pipeline.rowid_col_idx,
-			//  	                                    pipeline.materialize_column_ids,
-			//  	                                    pipeline.fixed_len_strings_columns,
-			//  	                                    false};
-			//  	// std::cout << std::this_thread::get_id() << " " << pipeline.materialize_column_ids.size() << "
-			//  "
-			//  	//           << pipeline.materialize_column_types.size() << " "
-			//  	//           << (pipeline.materialize_source_state != nullptr) << " "
-			//  	//           << (pipeline.materialize_local_source_state != nullptr) << " " <<
-			//  	//           current_chunk.ColumnCount()
-			//  	//           << " " << result.ColumnCount() << std::endl;
-			//  	// result.ReferenceColumns(current_chunk, {0, 1});
-			//  	for (idx_t col_idx = 0; col_idx < current_chunk.ColumnCount(); col_idx++) {
-			//  		auto &other_col = current_chunk.data[col_idx];
-			//  		auto &this_col = result.data[col_idx];
-			//  		D_ASSERT(other_col.GetType() == this_col.GetType());
-			//  		this_col.Reference(other_col);
-			//  	}
-			//  	result.SetCardinality(current_chunk.size());
-			//  	auto res = pipeline.materialize_source->GetData(context, result, source_input);
-			//  	// std::cout << "get data!" << result.size() << std::endl;
-			//  	double mat_end = getNow();
-			//  	pipeline.mat_operator_time += mat_end - mat_start;
-			//  }
 
 			EndOperator(current_operator, &current_chunk);
 			if (op_result == OperatorResultType::HAVE_MORE_OUTPUT) {
@@ -1057,15 +1070,6 @@ SourceResultType PipelineExecutor::FetchFromSource(DataChunk &result) {
 void PipelineExecutor::InitializeChunk(DataChunk &chunk) {
 	auto &last_op = pipeline.operators.empty() ? *pipeline.source : pipeline.operators.back().get();
 	auto types = last_op.GetTypes();
-	// if (pipeline.sink) {
-	// 	if (pipeline.materialize_strategy_mode == 1) {
-	// 		pipeline.mat_lock.lock();
-	// 		for (auto &[col_id, type] : pipeline.final_materialize_column_types) {
-	// 			types.push_back(LogicalType(LogicalTypeId(type)));
-	// 		}
-	// 		pipeline.mat_lock.unlock();
-	// 	}
-	// }
 
 	chunk.Initialize(Allocator::DefaultAllocator(), types);
 	chunk.disable_columns = last_op.disable_columns;

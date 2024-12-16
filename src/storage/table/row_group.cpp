@@ -736,12 +736,6 @@ void RowGroup::GetScalar(TransactionData transaction, CollectionScanState &state
 	}
 }
 
-void RowGroup::GetScalarCol(TransactionData transaction, CollectionScanState &state, Vector &result, uint64_t row_id,
-                            int64_t col_idx, int64_t result_rowid, ColumnFetchState &cfs) {
-	auto &column_data = GetColumn(col_idx);
-	column_data.FetchRow(transaction, cfs, row_id, result, result_rowid);
-}
-
 void RowGroup::ScanCommitted(CollectionScanState &state, DataChunk &result, TableScanType type) {
 	auto &transaction_manager = DuckTransactionManager::Get(GetCollection().GetAttached());
 

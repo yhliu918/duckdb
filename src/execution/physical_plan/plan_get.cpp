@@ -200,6 +200,7 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalGet &op) {
 				break;
 			}
 		}
+		flag = false;
 		// std::ofstream file_out("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/table_scan" +
 		//                            std::to_string(op.table_index),
 		//                        std::ios::out);
