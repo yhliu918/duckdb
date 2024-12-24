@@ -3,7 +3,6 @@
 #include <fstream>
 #include <iostream>
 #include <sys/time.h>
-#define QUEUE_THR 1
 using namespace duckdb;
 
 double getNow() {
@@ -11,7 +10,8 @@ double getNow() {
 	gettimeofday(&tv, NULL);
 	return tv.tv_sec * 1000.0 + tv.tv_usec / 1000.0;
 }
-void write_config(std::vector<string> payload, std::vector<int> type, int mat_strat, std::string build_name) {
+void write_config(std::vector<string> payload, std::vector<int> type, int mat_strat, std::string build_name,
+                  int queue_thr = 100) {
 	std::ofstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/op_mat_3", std::ios::out);
 	if (file.is_open()) {
 		for (auto &attr : payload) {
@@ -21,7 +21,7 @@ void write_config(std::vector<string> payload, std::vector<int> type, int mat_st
 
 	std::ofstream file_dis("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/op_dis_3", std::ios::out);
 	if (file_dis.is_open()) {
-		file_dis << build_name + ".build_side_rowid" << std::endl;
+		file_dis << "build_side_rowid" << std::endl;
 	}
 
 	std::ofstream file_pipeline2("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/pipeline2",
@@ -34,7 +34,7 @@ void write_config(std::vector<string> payload, std::vector<int> type, int mat_st
 	std::ofstream file_pipeline1("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/pipeline1",
 	                             std::ios::out);
 	if (file_pipeline1.is_open()) {
-		file_pipeline1 << mat_strat << " " << 0 << " " << QUEUE_THR << std::endl;
+		file_pipeline1 << mat_strat << " " << 0 << " " << queue_thr << std::endl;
 		file_pipeline1 << 1 << std::endl;
 		file_pipeline1 << 2 << " " << 0 << " " << payload.size() << " " << build_name + ".build_side_rowid"
 		               << std::endl;
@@ -70,6 +70,7 @@ int main(int argc, char *argv[]) {
 	int payload_tuple_size = atoi(argv[9]);
 	int mat_stat = atoi(argv[10]);
 	print_result = atoi(argv[11]);
+	int queue_thr = atoi(argv[12]);
 
 	std::string command = "rm /home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/*";
 	int cmd_result = system(command.c_str());
@@ -111,7 +112,7 @@ int main(int argc, char *argv[]) {
 		project_keys += "build_side_rowid";
 		std::string query = "select " + project_keys + " from probe,build where build_key = probe_key;";
 		if (mat_stat) {
-			write_config(payload, types, mat_stat, build_file_name);
+			write_config(payload, types, mat_stat, build_file_name, queue_thr);
 		}
 		double start = getNow();
 		std::cout << query << std::endl;
@@ -143,8 +144,12 @@ int main(int argc, char *argv[]) {
 		                    " where build_key = probe_key;";
 		std::cout << query << std::endl;
 		if (mat_stat) {
-			write_config(payload, types, mat_stat, build_file_name);
+			write_config(payload, types, mat_stat, build_file_name, queue_thr);
 		}
+		// int a;
+		// std::cout << "input a to continue" << std::endl;
+		// std::cin >> a;
+
 		double start = getNow();
 		auto result = con.Query(query);
 		double end = getNow();

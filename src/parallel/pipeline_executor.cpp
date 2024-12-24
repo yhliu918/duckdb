@@ -267,7 +267,22 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 	if (pipeline.materialize_strategy_mode == 1) {
 		int row_id_column_number = pipeline.materialize_maps.size();
 		for (auto &[rowid_col_idx, mat_map] : pipeline.materialize_maps) {
-			inverted_indexnew[rowid_col_idx].resize(500);
+			int reserve_size = 0;
+			if (mat_map.source_pipeline_id == pipeline.pipeline_id) {
+				reserve_size = pipeline.source.get()
+				                       ->Cast<PhysicalTableScan>()
+				                       .bind_data->Cast<TableScanBindData>()
+				                       .table.GetDataTable()
+				                       ->GetRowGroupCollection()
+				                       ->GetTotalRows() /
+				                   STANDARD_ROW_GROUPS_SIZE +
+				               1;
+			} else {
+				reserve_size = pipeline.materialize_sources[mat_map.source_pipeline_id].table->GetTotalRows() /
+				                   STANDARD_ROW_GROUPS_SIZE +
+				               1;
+			}
+			inverted_indexnew[rowid_col_idx].resize(reserve_size);
 			for (auto &[colid, type] : mat_map.materialize_column_types) {
 				pipeline.final_materialize_column_types[colid] = type;
 			}
@@ -689,17 +704,41 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 						DictionaryBuffer *dict_buffer = static_cast<DictionaryBuffer *>(buffer);
 						sel_index = &dict_buffer->GetSelVector();
 					}
-					D_ASSERT(sel_vec.GetType().id() == LogicalTypeId::BIGINT);
 
-					int64_t *sel = reinterpret_cast<int64_t *>(sel_vec.GetData());
-					int &index = result_index[rowid_col_idx];
-					for (int64_t i = 0; i < sink_chunk.size(); i++) {
-						// auto rowid = sel[i];
-						auto rowid = use_sel_index ? sel[sel_index->get_index(i)] : sel[i];
-						assert(rowid / STANDARD_ROW_GROUPS_SIZE < 500);
-						// std::cout << sel_index->get_index(i) << " " << rowid << std::endl;
-						inverted_indexnew[rowid_col_idx][rowid / STANDARD_ROW_GROUPS_SIZE].emplace_back(
-						    std::make_pair(rowid, index++));
+					switch (sel_vec.GetType().id()) {
+					case LogicalTypeId::BIGINT: {
+						D_ASSERT(sel_vec.GetType().id() == LogicalTypeId::BIGINT);
+
+						int64_t *sel = reinterpret_cast<int64_t *>(sel_vec.GetData());
+						int &index = result_index[rowid_col_idx];
+						for (int64_t i = 0; i < sink_chunk.size(); i++) {
+							// auto rowid = sel[i];
+							auto rowid = use_sel_index ? sel[sel_index->get_index(i)] : sel[i];
+							assert(rowid / STANDARD_ROW_GROUPS_SIZE < 500);
+							// std::cout << sel_index->get_index(i) << " " << rowid << std::endl;
+							inverted_indexnew[rowid_col_idx][rowid / STANDARD_ROW_GROUPS_SIZE].emplace_back(
+							    std::make_pair(rowid, index++));
+						}
+						break;
+					}
+					case LogicalTypeId::INTEGER: {
+						D_ASSERT(sel_vec.GetType().id() == LogicalTypeId::INTEGER);
+
+						int32_t *sel = reinterpret_cast<int32_t *>(sel_vec.GetData());
+						int &index = result_index[rowid_col_idx];
+						for (int64_t i = 0; i < sink_chunk.size(); i++) {
+							// auto rowid = sel[i];
+							auto rowid = use_sel_index ? sel[sel_index->get_index(i)] : sel[i];
+							assert(rowid / STANDARD_ROW_GROUPS_SIZE < 500);
+							// std::cout << sel_index->get_index(i) << " " << rowid << std::endl;
+							inverted_indexnew[rowid_col_idx][rowid / STANDARD_ROW_GROUPS_SIZE].emplace_back(
+							    std::make_pair(rowid, index++));
+						}
+						break;
+					}
+
+					default:
+						break;
 					}
 				}
 			}
