@@ -242,13 +242,6 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 		auto &current_operator = pipeline.operators[i].get();
 
 		auto chunk = make_uniq<DataChunk>();
-		// if (pipeline.pipeline_id) {
-		// 	std::cout << prev_operator.GetName() << " ";
-		// 	for (auto &type : prev_operator.GetTypes()) {
-		// 		std::cout << type.ToString() << " ";
-		// 	}
-		// 	std::cout << std::endl;
-		// }
 		chunk->Initialize(Allocator::Get(context.client), prev_operator.GetTypes());
 		chunk->disable_columns = prev_operator.disable_columns;
 
@@ -267,7 +260,22 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 	if (pipeline.materialize_strategy_mode == 1) {
 		int row_id_column_number = pipeline.materialize_maps.size();
 		for (auto &[rowid_col_idx, mat_map] : pipeline.materialize_maps) {
-			inverted_indexnew[rowid_col_idx].resize(500);
+			int reserve_size = 0;
+			if (mat_map.source_pipeline_id == pipeline.pipeline_id) {
+				reserve_size = pipeline.source.get()
+				                       ->Cast<PhysicalTableScan>()
+				                       .bind_data->Cast<TableScanBindData>()
+				                       .table.GetDataTable()
+				                       ->GetRowGroupCollection()
+				                       ->GetTotalRows() /
+				                   STANDARD_ROW_GROUPS_SIZE +
+				               1;
+			} else {
+				reserve_size = pipeline.materialize_sources[mat_map.source_pipeline_id].table->GetTotalRows() /
+				                   STANDARD_ROW_GROUPS_SIZE +
+				               1;
+			}
+			inverted_indexnew[rowid_col_idx].resize(reserve_size);
 			for (auto &[colid, type] : mat_map.materialize_column_types) {
 				pipeline.final_materialize_column_types[colid] = type;
 			}
@@ -878,7 +886,12 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 	}
 
 	bool print = pipeline.operators.size() > 0 || pipeline.sink->type != PhysicalOperatorType::CREATE_TABLE_AS;
-	print = true;
+	// print = false;
+	if (pipeline.sink.get()->type == PhysicalOperatorType::HASH_JOIN) {
+		std::ofstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/payload_build_time.txt",
+		                   std::ios::app);
+		file << pipeline.operator_total_time[pipeline.operator_total_time.size() - 1] << std::endl;
+	}
 	if (print) {
 		std::cout << "----------------------------" << std::endl;
 		for (int i = 0; i < pipeline.operator_total_time.size() - 1; i++) {
@@ -893,6 +906,10 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 		if (pipeline.materialize_flag) {
 			if (pipeline.materialize_strategy_mode == 1) {
 				std::cout << "Map building time: " << pipeline.map_building_time << std::endl;
+
+				std::ofstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/payload_build_time.txt",
+				                   std::ios::app);
+				file << pipeline.map_building_time << std::endl;
 			}
 			std::cout << "Materialize operator time: " << pipeline.mat_operator_time << std::endl;
 			std::cout << "Total materialized chunks: " << total_materialized_chunks << std::endl;

@@ -160,14 +160,16 @@ public:
 	}
 
 	T *GetSegmentNode_fixed(idx_t node_idx, idx_t row_id, int32_t string_size) {
-		if (string_size) {
-			// block header and dictionary header
-			node_idx = node_idx / ((DEFAULT_BLOCK_ALLOC_SIZE - 8 - 8) / (string_size + sizeof(int32_t)));
-		} else {
-			node_idx = node_idx / ((DEFAULT_BLOCK_ALLOC_SIZE - 8) / nodes[0].node->type_size);
+		if (!attribute_number) {
+			if (string_size) {
+				attribute_number = ((DEFAULT_BLOCK_ALLOC_SIZE - 8 - 8) / (string_size + sizeof(int32_t)));
+			} else {
+				attribute_number = ((DEFAULT_BLOCK_ALLOC_SIZE - 8) / nodes[0].node->type_size);
+			}
 		}
-		// std::cout << row_id << " " << node_idx << " " << start_index[node_idx] << std::endl;
-		return nodes[node_idx].node.get();
+		node_idx = node_idx / attribute_number;
+		auto &node_ptr = nodes[node_idx].node;
+		return node_ptr.get();
 	}
 
 	//! Append a column segment to the tree
@@ -322,6 +324,8 @@ public:
 	vector<SegmentNode<T>> nodes;
 	//! Lock to access or modify the nodes
 	mutex node_lock;
+
+	int attribute_number = 0;
 
 private:
 	T *GetRootSegmentInternal() {
