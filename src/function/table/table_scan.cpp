@@ -11,6 +11,7 @@
 #include "duckdb/main/client_config.hpp"
 #include "duckdb/main/client_data.hpp"
 #include "duckdb/optimizer/matcher/expression_matcher.hpp"
+#include "duckdb/parallel/pipeline_executor.hpp"
 #include "duckdb/planner/expression/bound_between_expression.hpp"
 #include "duckdb/planner/expression_iterator.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
@@ -129,7 +130,7 @@ static void TableScanFunc(ClientContext &context, TableFunctionInput &data_p, Da
 			               data_p.fixed_len_strings_columns, data_p.inverted_index, data_p.inverted_indexnew);
 		} else {
 			std::unordered_map<int, std::unordered_map<int64_t, std::vector<int>>> inverted_index;
-			std::vector<std::vector<std::pair<int64_t, int>>> inverted_indexnew;
+			InvertedIndex inverted_indexnew;
 			storage.Select(transaction, output, state.scan_state, data_p.rowid_column_id, data_p.materialize_col_id,
 			               data_p.fixed_len_strings_columns, &inverted_index, &inverted_indexnew);
 		}

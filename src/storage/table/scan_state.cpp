@@ -1,6 +1,7 @@
 #include "duckdb/storage/table/scan_state.hpp"
 
 #include "duckdb/execution/adaptive_filter.hpp"
+#include "duckdb/parallel/pipeline_executor.hpp"
 #include "duckdb/storage/table/column_data.hpp"
 #include "duckdb/storage/table/column_segment.hpp"
 #include "duckdb/storage/table/row_group.hpp"
@@ -171,7 +172,7 @@ bool CollectionScanState::Select(DuckTransaction &transaction, DataChunk &result
                                  std::unordered_map<int64_t, int64_t> &project_column_ids,
                                  std::unordered_map<int64_t, int32_t> &fixed_len_strings_columns,
                                  std::unordered_map<int, std::unordered_map<int64_t, std::vector<int>>> *inverted_index,
-                                 std::vector<std::vector<std::pair<int64_t, int>>> *inverted_indexnew) {
+                                 InvertedIndex *inverted_indexnew) {
 	auto cfs = ColumnFetchState();
 	if (inverted_index && inverted_index->size() > 0) {
 		for (auto &[row_group_index, row_group_inverted_index] : *inverted_index) {
@@ -188,9 +189,9 @@ bool CollectionScanState::Select(DuckTransaction &transaction, DataChunk &result
 		}
 		return true;
 	}
-	if (inverted_indexnew && inverted_indexnew->size() > 0) {
-		for (int i = 0; i < inverted_indexnew->size(); i++) {
-			auto row_group_inverted_index = inverted_indexnew->at(i);
+	if (inverted_indexnew && inverted_indexnew->index_.size() > 0) {
+		for (int i = 0; i < inverted_indexnew->index_.size(); i++) {
+			auto row_group_inverted_index = inverted_indexnew->index_.at(i);
 			if (int(row_group_inverted_index.size()) == 0) {
 				continue;
 			}
@@ -209,14 +210,35 @@ bool CollectionScanState::Select(DuckTransaction &transaction, DataChunk &result
 		return true;
 	}
 	auto sel_vec = result.data[rowid_col_idx];
-
-	int64_t *sel = reinterpret_cast<int64_t *>(sel_vec.GetData());
-	for (int64_t i = 0; i < result.size(); i++) {
-		auto rowid = sel[i];
-		auto row_group = row_groups->GetSegmentNode(rowid / STANDARD_ROW_GROUPS_SIZE);
-		// auto row_group = row_groups->GetSegmentNode(rowid / STANDARD_ROW_GROUPS_SIZE);
-		row_group->GetScalar(transaction, *this, result, rowid, project_column_ids, fixed_len_strings_columns, i, cfs);
+	switch (sel_vec.GetType().id()) {
+	case LogicalTypeId::BIGINT: {
+		int64_t *sel = reinterpret_cast<int64_t *>(sel_vec.GetData());
+		for (int64_t i = 0; i < result.size(); i++) {
+			auto rowid = sel[i];
+			// std::cout << rowid << std::endl;
+			auto row_group = row_groups->GetSegmentNode(rowid / STANDARD_ROW_GROUPS_SIZE);
+			// auto row_group = row_groups->GetSegmentNode(rowid / STANDARD_ROW_GROUPS_SIZE);
+			row_group->GetScalar(transaction, *this, result, rowid, project_column_ids, fixed_len_strings_columns, i,
+			                     cfs);
+		}
+		break;
 	}
+	case LogicalTypeId::INTEGER: {
+		int32_t *sel = reinterpret_cast<int32_t *>(sel_vec.GetData());
+		for (int64_t i = 0; i < result.size(); i++) {
+			auto rowid = sel[i];
+			// std::cout << rowid << std::endl;
+			auto row_group = row_groups->GetSegmentNode(rowid / STANDARD_ROW_GROUPS_SIZE);
+			// auto row_group = row_groups->GetSegmentNode(rowid / STANDARD_ROW_GROUPS_SIZE);
+			row_group->GetScalar(transaction, *this, result, rowid, project_column_ids, fixed_len_strings_columns, i,
+			                     cfs);
+		}
+		break;
+	}
+	default:
+		break;
+	}
+
 	return true;
 }
 

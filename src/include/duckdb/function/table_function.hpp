@@ -26,6 +26,7 @@ class LogicalGet;
 class TableFilterSet;
 class TableCatalogEntry;
 struct MultiFileReader;
+class InvertedIndex;
 
 struct TableFunctionInfo {
 	DUCKDB_API virtual ~TableFunctionInfo();
@@ -158,7 +159,7 @@ public:
 	unordered_map<int64_t, int32_t> fixed_len_strings_columns;
 	bool use_inverted_index;
 	std::unordered_map<int, std::unordered_map<int64_t, std::vector<int>>> *inverted_index;
-	std::vector<std::vector<std::pair<int64_t, int>>> *inverted_indexnew;
+	InvertedIndex *inverted_indexnew;
 };
 
 enum class ScanType : uint8_t { TABLE, PARQUET };

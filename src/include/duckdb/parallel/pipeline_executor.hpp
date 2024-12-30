@@ -16,8 +16,9 @@
 #include "duckdb/parallel/pipeline.hpp"
 #include "duckdb/parallel/thread_context.hpp"
 
+#include <fstream>
 #include <functional>
-#include <sparsehash/sparse_hash_map>
+#include <hash_table7.hpp>
 
 namespace duckdb {
 class Executor;
@@ -31,6 +32,18 @@ enum class PipelineExecuteResult {
 	//! The PipelineExecutor was interrupted and should not be called again until the interrupt is handled as specified
 	//! in the InterruptMode
 	INTERRUPTED
+};
+class InvertedIndex {
+public:
+	// std::vector<emhash7::HashMap<int64_t, std::vector<int>>> index_;
+	std::vector<std::vector<std::pair<int64_t, int>>> index_;
+	void insert(int64_t rowid, int index) {
+		index_[rowid / STANDARD_ROW_GROUPS_SIZE].emplace_back(std::make_pair(rowid, index));
+		// index_[rowid / STANDARD_ROW_GROUPS_SIZE][rowid].emplace_back(index);
+
+		// std::ofstream out("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/inverted_index",
+		// std::ios::app); out << rowid << std::endl;
+	}
 };
 
 //! The Pipeline class represents an execution pipeline
@@ -68,9 +81,8 @@ public:
 
 	//! row_group_id -> {row_idx -> vector of output rowids}
 	std::unordered_map<int, std::unordered_map<int64_t, std::vector<int>>> inverted_index;
-	// std::unordered_map<int, std::map<int64_t, std::vector<int>>> inverted_indexnew;
-	std::unordered_map<int, std::vector<std::vector<std::pair<int64_t, int>>>>
-	    inverted_indexnew; // rowid_col_idx -> row_group idx -> <rowid, output rowid>
+
+	std::unordered_map<int, InvertedIndex> inverted_indexnew; // rowid_col_idx -> row_group idx -> <rowid, output rowid>
 
 	std::unordered_map<int, int> result_index;
 

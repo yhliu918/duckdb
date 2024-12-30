@@ -8,7 +8,6 @@
 #include "duckdb/storage/checkpoint/write_overflow_strings_to_disk.hpp"
 #include "duckdb/storage/string_uncompressed.hpp"
 #include "duckdb/storage/table/column_data_checkpointer.hpp"
-
 #include "fsst.h"
 #include "miniz_wrapper.hpp"
 
@@ -561,7 +560,6 @@ void BitUnpackRange(data_ptr_t src_ptr, data_ptr_t dst_ptr, idx_t count, idx_t r
 template <bool ALLOW_FSST_VECTORS>
 void FSSTStorage::StringScanPartial(ColumnSegment &segment, ColumnScanState &state, idx_t scan_count, Vector &result,
                                     idx_t result_offset) {
-
 	auto &scan_state = state.scan_state->Cast<FSSTScanState>();
 	auto start = segment.GetRelativeIndex(state.row_index);
 
@@ -606,6 +604,7 @@ void FSSTStorage::StringScanPartial(ColumnSegment &segment, ColumnScanState &sta
 	auto offsets = CalculateBpDeltaOffsets(scan_state.last_known_row, start, scan_count);
 
 	auto bitunpack_buffer = unsafe_unique_ptr<uint32_t[]>(new uint32_t[offsets.total_bitunpack_count]);
+
 	BitUnpackRange(base_data, data_ptr_cast(bitunpack_buffer.get()), offsets.total_bitunpack_count,
 	               offsets.bitunpack_start_row, scan_state.current_width);
 	auto delta_decode_buffer = unsafe_unique_ptr<uint32_t[]>(new uint32_t[offsets.total_delta_decode_count]);
@@ -652,7 +651,77 @@ void FSSTStorage::StringScan(ColumnSegment &segment, ColumnScanState &state, idx
 //===--------------------------------------------------------------------===//
 void FSSTStorage::StringFetchRow(ColumnSegment &segment, ColumnFetchState &state, row_t row_id, Vector &result,
                                  idx_t result_idx) {
+	if (state.full_decompression) {
+		if (!state.decompressed_vector[state.vector_index]) {
+			int scan_count = segment.count.load();
+			state.decompressed_vector[state.vector_index] =
+			    make_uniq<Vector>(result.GetType(), true, false, scan_count);
+			auto &buffer_manager = BufferManager::GetBufferManager(segment.db);
+			auto handle = buffer_manager.Pin(segment.block);
+			auto base_ptr = handle.Ptr() + segment.GetBlockOffset();
+			auto base_data = data_ptr_cast(base_ptr + sizeof(fsst_compression_header_t));
+			auto dict = GetDictionary(segment, handle);
 
+			duckdb_fsst_decoder_t decoder;
+			bitpacking_width_t width;
+			auto have_symbol_table = ParseFSSTSegmentHeader(base_ptr, &decoder, &width);
+
+			auto result_data = FlatVector::GetData<string_t>(*state.decompressed_vector[state.vector_index]);
+			if (!have_symbol_table) {
+				// There is no FSST symtable. This is only the case for empty strings or NULLs. We emit an empty string.
+				result_data[result_idx] = string_t(nullptr, 0);
+				return;
+			}
+
+			// auto offsets = CalculateBpDeltaOffsets(segment.start - 1, segment.start, scan_count);
+			auto offsets = CalculateBpDeltaOffsets(-1, 0, scan_count);
+
+			auto bitunpack_buffer = unique_ptr<uint32_t[]>(new uint32_t[offsets.total_bitunpack_count]);
+			BitUnpackRange(base_data, data_ptr_cast(bitunpack_buffer.get()), offsets.total_bitunpack_count,
+			               offsets.bitunpack_start_row, width);
+
+			auto delta_decode_buffer = unique_ptr<uint32_t[]>(new uint32_t[offsets.total_delta_decode_count]);
+			DeltaDecodeIndices(bitunpack_buffer.get() + offsets.bitunpack_alignment_offset, delta_decode_buffer.get(),
+			                   offsets.total_delta_decode_count, 0);
+
+			vector<unsigned char> uncompress_buffer;
+			auto string_block_limit = StringUncompressed::GetStringBlockLimit(segment.GetBlockManager().GetBlockSize());
+			uncompress_buffer.resize(string_block_limit + 1);
+			for (idx_t i = 0; i < scan_count; i++) {
+				uint32_t str_len = bitunpack_buffer[i + offsets.scan_offset];
+				auto str_ptr = FSSTStorage::FetchStringPointer(
+				    dict, base_ptr,
+				    UnsafeNumericCast<int32_t>(delta_decode_buffer[i + offsets.unused_delta_decoded_values]));
+				if (str_len > 0) {
+					result_data[i] = FSSTPrimitives::DecompressValue((void *)&decoder,
+					                                                 *state.decompressed_vector[state.vector_index],
+					                                                 str_ptr, str_len, uncompress_buffer);
+					// std::cout << i << " " << str_len << " " << std::string(result_data[i].GetData(), str_len)
+					//           << std::endl;
+
+				} else {
+					result_data[i] = string_t(nullptr, 0);
+				}
+			}
+		}
+		if (state.decompressed_vector[state.vector_index]) {
+			auto result_data = FlatVector::GetData<string_t>(result);
+			auto decompressed_data = FlatVector::GetData<string_t>(*state.decompressed_vector[state.vector_index]);
+			if (state.row_index) {
+				for (auto index : *state.row_index) {
+					// std::cout << index << " " << segment.start << " ";
+					// std::cout << index << std::endl;
+					result_data[index] = decompressed_data[row_id];
+				}
+			} else {
+				// std::cout << result_idx << " " << segment.start << " ";
+				// std::cout << result_idx << std::endl;
+				result_data[result_idx] = decompressed_data[row_id];
+				// std::cout << result_idx << " " << std::string(result_data[result_idx].GetData(), 10) << std::endl;
+			}
+		}
+		return;
+	}
 	auto &buffer_manager = BufferManager::GetBufferManager(segment.db);
 	auto handle = buffer_manager.Pin(segment.block);
 	auto base_ptr = handle.Ptr() + segment.GetBlockOffset();
@@ -680,7 +749,6 @@ void FSSTStorage::StringFetchRow(ColumnSegment &segment, ColumnFetchState &state
 	auto delta_decode_buffer = unique_ptr<uint32_t[]>(new uint32_t[offsets.total_delta_decode_count]);
 	DeltaDecodeIndices(bitunpack_buffer.get() + offsets.bitunpack_alignment_offset, delta_decode_buffer.get(),
 	                   offsets.total_delta_decode_count, 0);
-
 	uint32_t string_length = bitunpack_buffer[offsets.scan_offset];
 
 	string_t compressed_string = UncompressedStringStorage::FetchStringFromDict(
@@ -690,6 +758,16 @@ void FSSTStorage::StringFetchRow(ColumnSegment &segment, ColumnFetchState &state
 	vector<unsigned char> uncompress_buffer;
 	auto string_block_limit = StringUncompressed::GetStringBlockLimit(segment.GetBlockManager().GetBlockSize());
 	uncompress_buffer.resize(string_block_limit + 1);
+
+	if (state.row_index) {
+		string_t data = FSSTPrimitives::DecompressValue((void *)&decoder, result, compressed_string.GetData(),
+		                                                compressed_string.GetSize(), uncompress_buffer);
+		for (auto index : *state.row_index) {
+			result_data[index] = data;
+		}
+		return;
+	}
+
 	result_data[result_idx] = FSSTPrimitives::DecompressValue((void *)&decoder, result, compressed_string.GetData(),
 	                                                          compressed_string.GetSize(), uncompress_buffer);
 }

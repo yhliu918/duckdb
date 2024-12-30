@@ -19,6 +19,8 @@
 #include "duckdb/storage/table/chunk_info.hpp"
 #include "duckdb/storage/table/segment_base.hpp"
 
+#include <hash_table7.hpp>
+
 namespace duckdb {
 class AttachedDatabase;
 class BlockManager;
@@ -115,6 +117,9 @@ public:
 	//! skipped.
 	bool CheckZonemapSegments(CollectionScanState &state);
 	void Scan(TransactionData transaction, CollectionScanState &state, DataChunk &result);
+	void GetScalar(TransactionData transaction, CollectionScanState &state, Vector &result,
+	               emhash7::HashMap<int64_t, std::vector<int>> &inverted_index, int64_t project_column_id,
+	               int32_t fixed_string_len, ColumnFetchState &cfs);
 	void GetScalar(TransactionData transaction, CollectionScanState &state, Vector &result,
 	               std::vector<std::pair<int64_t, int>> &inverted_index, int64_t project_column_id,
 	               int32_t fixed_string_len, ColumnFetchState &cfs);

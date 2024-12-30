@@ -114,6 +114,9 @@ struct ColumnFetchState {
 
 	uint32_t fixed_length = 0;
 	std::vector<int> *row_index;
+	bool full_decompression = false;
+	vector<unique_ptr<Vector>> decompressed_vector;
+	int vector_index = 0;
 };
 
 struct ScanFilter {
@@ -202,7 +205,7 @@ public:
 	            std::unordered_map<int64_t, int64_t> &project_column_ids,
 	            std::unordered_map<int64_t, int32_t> &fixed_len_strings_columns,
 	            std::unordered_map<int, std::unordered_map<int64_t, std::vector<int>>> *inverted_index,
-	            std::vector<std::vector<std::pair<int64_t, int>>> *inverted_indexnew);
+	            InvertedIndex *inverted_indexnew);
 	bool Scan(DuckTransaction &transaction, DataChunk &result);
 	bool ScanCommitted(DataChunk &result, TableScanType type);
 	bool ScanCommitted(DataChunk &result, SegmentLock &l, TableScanType type);

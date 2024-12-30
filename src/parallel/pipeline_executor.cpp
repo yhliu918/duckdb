@@ -275,7 +275,8 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 				                   STANDARD_ROW_GROUPS_SIZE +
 				               1;
 			}
-			inverted_indexnew[rowid_col_idx].resize(reserve_size);
+
+			inverted_indexnew[rowid_col_idx].index_.resize(reserve_size);
 			for (auto &[colid, type] : mat_map.materialize_column_types) {
 				pipeline.final_materialize_column_types[colid] = type;
 			}
@@ -697,17 +698,37 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 						DictionaryBuffer *dict_buffer = static_cast<DictionaryBuffer *>(buffer);
 						sel_index = &dict_buffer->GetSelVector();
 					}
-					D_ASSERT(sel_vec.GetType().id() == LogicalTypeId::BIGINT);
 
-					int64_t *sel = reinterpret_cast<int64_t *>(sel_vec.GetData());
-					int &index = result_index[rowid_col_idx];
-					for (int64_t i = 0; i < sink_chunk.size(); i++) {
-						// auto rowid = sel[i];
-						auto rowid = use_sel_index ? sel[sel_index->get_index(i)] : sel[i];
-						assert(rowid / STANDARD_ROW_GROUPS_SIZE < 500);
-						// std::cout << sel_index->get_index(i) << " " << rowid << std::endl;
-						inverted_indexnew[rowid_col_idx][rowid / STANDARD_ROW_GROUPS_SIZE].emplace_back(
-						    std::make_pair(rowid, index++));
+					switch (sel_vec.GetType().id()) {
+					case LogicalTypeId::BIGINT: {
+						D_ASSERT(sel_vec.GetType().id() == LogicalTypeId::BIGINT);
+
+						int64_t *sel = reinterpret_cast<int64_t *>(sel_vec.GetData());
+						int &index = result_index[rowid_col_idx];
+						for (int64_t i = 0; i < sink_chunk.size(); i++) {
+							// auto rowid = sel[i];
+							auto rowid = use_sel_index ? sel[sel_index->get_index(i)] : sel[i];
+							// std::cout << sel_index->get_index(i) << " " << rowid << std::endl;
+							inverted_indexnew[rowid_col_idx].insert(rowid, index++);
+						}
+						break;
+					}
+					case LogicalTypeId::INTEGER: {
+						D_ASSERT(sel_vec.GetType().id() == LogicalTypeId::INTEGER);
+
+						int32_t *sel = reinterpret_cast<int32_t *>(sel_vec.GetData());
+						int &index = result_index[rowid_col_idx];
+						for (int64_t i = 0; i < sink_chunk.size(); i++) {
+							// auto rowid = sel[i];
+							int64_t rowid = use_sel_index ? sel[sel_index->get_index(i)] : sel[i];
+							// std::cout << sel_index->get_index(i) << " " << rowid << std::endl;
+							inverted_indexnew[rowid_col_idx].insert(rowid, index++);
+						}
+						break;
+					}
+
+					default:
+						break;
 					}
 				}
 			}
@@ -749,7 +770,7 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 				// chunk_queue.clear();
 				chunk_counter = 0;
 				for (auto it = inverted_indexnew.begin(); it != inverted_indexnew.end(); it++) {
-					for (auto it2 = it->second.begin(); it2 != it->second.end(); it2++) {
+					for (auto it2 = it->second.index_.begin(); it2 != it->second.index_.end(); it2++) {
 						it2->clear();
 					}
 				}
@@ -834,7 +855,9 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 		// chunk_queue.clear();
 		chunk_counter = 0;
 		for (auto it = inverted_indexnew.begin(); it != inverted_indexnew.end(); it++) {
-			it->second.clear();
+			for (auto it2 = it->second.index_.begin(); it2 != it->second.index_.end(); it2++) {
+				it2->clear();
+			}
 		}
 		for (auto &[rowid_col_idx, mat_map] : pipeline.materialize_maps) {
 			result_index[rowid_col_idx] = 0;
@@ -886,12 +909,16 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 	}
 
 	bool print = pipeline.operators.size() > 0 || pipeline.sink->type != PhysicalOperatorType::CREATE_TABLE_AS;
-	// print = false;
-	if (pipeline.sink.get()->type == PhysicalOperatorType::HASH_JOIN) {
-		std::ofstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/payload_build_time.txt",
-		                   std::ios::app);
-		file << pipeline.operator_total_time[pipeline.operator_total_time.size() - 1] << std::endl;
+	bool dump_statistic = false;
+	if (dump_statistic) {
+		if (pipeline.sink->type == PhysicalOperatorType::HASH_JOIN) {
+			std::ofstream out(
+			    "/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/payload_hash_table_build_time.txt",
+			    std::ios::app);
+			out << pipeline.operator_total_time[pipeline.operator_total_time.size() - 1] << std::endl;
+		}
 	}
+	print = true;
 	if (print) {
 		std::cout << "----------------------------" << std::endl;
 		for (int i = 0; i < pipeline.operator_total_time.size() - 1; i++) {
@@ -906,10 +933,20 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 		if (pipeline.materialize_flag) {
 			if (pipeline.materialize_strategy_mode == 1) {
 				std::cout << "Map building time: " << pipeline.map_building_time << std::endl;
-
-				std::ofstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/payload_build_time.txt",
-				                   std::ios::app);
-				file << pipeline.map_building_time << std::endl;
+				if (dump_statistic) {
+					std::ofstream out(
+					    "/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/payload_build_time.txt",
+					    std::ios::app);
+					int materialize_times = (total_materialized_chunks / pipeline.chunk_queue_threshold);
+					if (total_materialized_chunks % pipeline.chunk_queue_threshold != 0) {
+						materialize_times++;
+					}
+					int single_time_avg_rows = total_materialized_rows / materialize_times;
+					out << materialize_times << " " << single_time_avg_rows << " " << total_materialized_chunks << " "
+					    << total_materialized_rows << " " << pipeline.map_building_time << " "
+					    << pipeline.mat_operator_time << std::endl;
+					out.close();
+				}
 			}
 			std::cout << "Materialize operator time: " << pipeline.mat_operator_time << std::endl;
 			std::cout << "Total materialized chunks: " << total_materialized_chunks << std::endl;
