@@ -516,18 +516,21 @@ void ColumnData::FetchRowNewBatch(TransactionData &transaction, ColumnFetchState
 	}
 }
 
-void ColumnData::FetchRowNew(TransactionData &transaction, ColumnFetchState &state, int64_t rowid,
-                             std::vector<int> &row_ids, Vector &result, int32_t fixed_string_len) {
+void ColumnData::FetchRowNew(TransactionData &transaction, ColumnFetchState &state, int64_t rowid, Vector &result,
+                             std::vector<int> &row_ids, int32_t fixed_string_len) {
 	ColumnSegment *segment = nullptr;
 	if (fixed_string_len != 0 ||
 	    (data.nodes[0].node->function.get().type == CompressionType::COMPRESSION_UNCOMPRESSED &&
 	     data.nodes[0].node->type.InternalType() != PhysicalType::VARCHAR)) {
 		segment = data.GetSegmentNode_fixed((rowid % STANDARD_ROW_GROUPS_SIZE), rowid, fixed_string_len);
+		state.vector_index = rowid % STANDARD_ROW_GROUPS_SIZE;
 	} else {
-		segment = data.GetSegmentNode(rowid, rowid);
+		segment = data.GetSegment(rowid, &state.vector_index);
+		// segment = data.GetSegmentNode(rowid, rowid);
 	}
 	state.fixed_length = fixed_string_len;
 	state.row_index = &row_ids;
+	state.full_decompression = true;
 
 	segment->FetchRow(state, rowid, result, MAX_ROW_ID);
 }
@@ -545,13 +548,15 @@ void ColumnData::FetchRowNew(TransactionData transaction, ColumnFetchState &stat
 		// segment = data.GetSegmentNode_fixed(((row_id % 1048576) % STANDARD_ROW_GROUPS_SIZE), row_id, string_size);
 		segment = data.GetSegmentNode_fixed((row_id % STANDARD_ROW_GROUPS_SIZE), row_id, string_size);
 		state.fixed_length = string_size;
+		state.vector_index = row_id % STANDARD_ROW_GROUPS_SIZE;
 	} else {
-		segment = data.GetSegment(row_id);
+		segment = data.GetSegment(row_id, &state.vector_index);
 		// segment = data.GetSegmentNode(row_id, row_id);
 	}
-	// segment = data.GetSegment(row_id);
-	// now perform the fetch within the segment
-	// std::cout << row_id;
+	//! Currently, we fully decompress all data in the segment
+	//! FIX ME: later choose depending on the entry size
+	state.full_decompression = true;
+
 	segment->FetchRow(state, row_id, result, result_idx);
 	// merge any updates made to this row
 

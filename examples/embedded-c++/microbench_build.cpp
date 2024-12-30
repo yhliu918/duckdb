@@ -160,14 +160,35 @@ int main(int argc, char *argv[]) {
 		std::cout << mode << " " << thread << " " << probe_size << " " << build_size << " " << selectivity << " "
 		          << payload_column_num << " " << payload_tuple_size << " " << heavy_hitter_ratio << " " << end - start
 		          << std::endl;
+		// std::ofstream out("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/payload_build_time.txt",
+		//                   std::ios::app);
+		// out << mat_stat << " " << queue_thr << " " << end - start << std::endl;
 	} else // load from compressed duckdb storage
 	{
 		DuckDB db("/home/yihao/duckdb/origin/duckdb/examples/embedded-c++/release/tpch.db");
 		Connection con(db);
 		con.Query("SET threads TO " + thread + ";");
-		con.Query("SET disabled_optimizers = 'join_order,build_side_probe_side';");
-		std::string query = "select build_side_rowid from " + probe_file_name + ", " + build_file_name +
+		con.Query("SET disabled_optimizers = 'join_order,build_side_probe_side,COMPRESSED_MATERIALIZATION';");
+		// std::cout << probe_file_name << " " << build_file_name << std::endl;
+		std::vector<std::string> payload;
+		std::string project_keys = "";
+		for (int i = 0; i < payload_column_num; i++) {
+			project_keys += "payload_" + std::to_string(i) + ",";
+			payload.push_back("payload_" + std::to_string(i));
+		}
+		project_keys += "build_side_rowid";
+
+		std::string query = "select " + project_keys + " from " + probe_file_name + ", " + build_file_name +
 		                    " where build_key = probe_key;";
+		std::cout << query << std::endl;
+		if (mat_stat) {
+			write_config(payload, types, mat_stat, build_file_name, queue_thr);
+		}
+
+		// int a;
+		// std::cout << "input a to continue" << std::endl;
+		// std::cin >> a;
+
 		double start = getNow();
 		auto result = con.Query(query);
 		double end = getNow();

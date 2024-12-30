@@ -129,11 +129,15 @@ public:
 		return nodes.back().node.get();
 	}
 	//! Gets a pointer to a specific column segment for the given row
-	T *GetSegment(idx_t row_number) {
+	T *GetSegment(idx_t row_number, int *node_idx = nullptr) {
 		auto l = Lock();
-		return GetSegment(l, row_number);
+		return GetSegment(l, row_number, node_idx);
 	}
-	T *GetSegment(SegmentLock &l, idx_t row_number) {
+	T *GetSegment(SegmentLock &l, idx_t row_number, int *node_idx = nullptr) {
+		if (node_idx) {
+			*node_idx = GetSegmentIndex(l, row_number);
+			return nodes[*node_idx].node.get();
+		}
 		return nodes[GetSegmentIndex(l, row_number)].node.get();
 	}
 	T *GetSegmentNode(idx_t node_idx) {
