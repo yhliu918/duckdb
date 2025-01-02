@@ -4,7 +4,7 @@
 #include "duckdb/common/limits.hpp"
 #include "duckdb/execution/operator/helper/physical_materialized_collector.hpp"
 #include "duckdb/execution/operator/join/physical_hash_join.hpp"
-#include "duckdb/execution/operator/scan/physical_table_scan.hpp"
+#include "duckdb/execution/physical_operator_states.hpp"
 #include "duckdb/function/table/table_scan.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "json.hpp"
@@ -22,6 +22,8 @@
 #endif
 using json = nlohmann::json;
 namespace duckdb {
+class TableScanLocalState;
+class TableScanLocalSourceState;
 double getNow() {
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
@@ -214,6 +216,7 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 	pipeline.mat_lock.unlock();
 
 	local_source_state = pipeline.source->GetLocalSourceState(context, *pipeline.source_state);
+	// (*local_source_state).Cast<TableScanLocalSourceState>().local_state.get()->Cast<TableScanLocalState>().scan_state;
 
 	intermediate_chunks.reserve(pipeline.operators.size());
 	intermediate_states.reserve(pipeline.operators.size());

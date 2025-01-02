@@ -1,0 +1,36 @@
+{
+    "A": {
+        "A.k1": {
+            "col_id": 0,
+            "type": 14
+        }
+    },
+    "B": {
+        "B.k1": {
+            "col_id": 0,
+            "type": 14
+        },
+        "B.k2": {
+            "col_id": 1,
+            "type": 14
+        },
+        "rowid(B)": {
+            "col_id": 2,
+            "type": 14
+        }
+    },
+    "C": {
+        "C.k2": {
+            "col_id": 0,
+            "type": 14
+        },
+        "C.v1": {
+            "col_id": 1,
+            "type": 25
+        },
+        "rowid(C)": {
+            "col_id": 2,
+            "type": 14
+        }
+    }
+}

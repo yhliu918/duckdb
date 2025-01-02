@@ -140,8 +140,9 @@ public:
 	void FetchRowNew(TransactionData &transaction, ColumnFetchState &cfs, int64_t rowid, Vector &result,
 	                 std::vector<int> &row_ids, int32_t fixed_string_len);
 	int GetEntrySize();
+	int GetColumnSegmentCount();
 	void FetchRowNew(TransactionData transaction, ColumnFetchState &state, row_t row_id, Vector &result,
-	                 idx_t result_idx, int32_t string_size = 0);
+	                 idx_t result_idx, int32_t string_size = 0, bool full_decompression = true);
 
 	virtual void Update(TransactionData transaction, idx_t column_index, Vector &update_vector, row_t *row_ids,
 	                    idx_t update_count);

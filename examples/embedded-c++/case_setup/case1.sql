@@ -1,0 +1,1 @@
+select A.k1, B.k2, C.v1 from A, B, C where A.k1 = B.k1 and B.k2 = C.k2;

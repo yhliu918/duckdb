@@ -884,9 +884,126 @@ void BitpackingScan(ColumnSegment &segment, ColumnScanState &state, idx_t scan_c
 //===--------------------------------------------------------------------===//
 // Fetch
 //===--------------------------------------------------------------------===//
-template <class T>
+template <class T, class T_S = typename MakeSigned<T>::type, class T_U = typename MakeUnsigned<T>::type>
 void BitpackingFetchRow(ColumnSegment &segment, ColumnFetchState &state, row_t row_id, Vector &result,
                         idx_t result_idx) {
+	// if (state.full_decompression) {
+	// 	if (!state.decompressed_vector[state.vector_index]) {
+	// 		int scan_count = segment.count.load();
+	// 		state.decompressed_vector[state.vector_index] =
+	// 		    make_uniq<Vector>(result.GetType(), true, false, scan_count);
+	// 		BitpackingScanState<T> scan_state(segment);
+	// 		idx_t result_offset = 0;
+
+	// 		T *result_data = FlatVector::GetData<T>(*state.decompressed_vector[state.vector_index]);
+	// 		state.decompressed_vector[state.vector_index]->SetVectorType(VectorType::FLAT_VECTOR);
+
+	// 		//! Because FOR offsets all our values to be 0 or above, we can always skip sign extension here
+	// 		bool skip_sign_extend = true;
+
+	// 		idx_t scanned = 0;
+	// 		while (scanned < scan_count) {
+	// 			D_ASSERT(scan_state.current_group_offset <= BITPACKING_METADATA_GROUP_SIZE);
+
+	// 			// Exhausted this metadata group, move pointers to next group and load metadata for next group.
+	// 			if (scan_state.current_group_offset == BITPACKING_METADATA_GROUP_SIZE) {
+	// 				scan_state.LoadNextGroup();
+	// 			}
+
+	// 			idx_t offset_in_compression_group =
+	// 			    scan_state.current_group_offset % BitpackingPrimitives::BITPACKING_ALGORITHM_GROUP_SIZE;
+
+	// 			if (scan_state.current_group.mode == BitpackingMode::CONSTANT) {
+	// 				idx_t remaining = scan_count - scanned;
+	// 				idx_t to_scan =
+	// 				    MinValue(remaining, BITPACKING_METADATA_GROUP_SIZE - scan_state.current_group_offset);
+	// 				T *begin = result_data + result_offset + scanned;
+	// 				T *end = begin + remaining;
+	// 				std::fill(begin, end, scan_state.current_constant);
+	// 				scanned += to_scan;
+	// 				scan_state.current_group_offset += to_scan;
+	// 				continue;
+	// 			}
+	// 			if (scan_state.current_group.mode == BitpackingMode::CONSTANT_DELTA) {
+	// 				idx_t remaining = scan_count - scanned;
+	// 				idx_t to_scan =
+	// 				    MinValue(remaining, BITPACKING_METADATA_GROUP_SIZE - scan_state.current_group_offset);
+	// 				T *target_ptr = result_data + result_offset + scanned;
+
+	// 				for (idx_t i = 0; i < to_scan; i++) {
+	// 					idx_t multiplier = scan_state.current_group_offset + i;
+	// 					// intended static casts to unsigned and back for defined wrapping of integers
+	// 					target_ptr[i] = static_cast<T>((static_cast<T_U>(scan_state.current_constant) * multiplier) +
+	// 					                               static_cast<T_U>(scan_state.current_frame_of_reference));
+	// 				}
+
+	// 				scanned += to_scan;
+	// 				scan_state.current_group_offset += to_scan;
+	// 				continue;
+	// 			}
+	// 			D_ASSERT(scan_state.current_group.mode == BitpackingMode::FOR ||
+	// 			         scan_state.current_group.mode == BitpackingMode::DELTA_FOR);
+
+	// 			idx_t to_scan =
+	// 			    MinValue<idx_t>(scan_count - scanned, BitpackingPrimitives::BITPACKING_ALGORITHM_GROUP_SIZE -
+	// 			                                              offset_in_compression_group);
+	// 			// Calculate start of compression algorithm group
+	// 			data_ptr_t current_position_ptr =
+	// 			    scan_state.current_group_ptr + scan_state.current_group_offset * scan_state.current_width / 8;
+	// 			data_ptr_t decompression_group_start_pointer =
+	// 			    current_position_ptr - offset_in_compression_group * scan_state.current_width / 8;
+
+	// 			T *current_result_ptr = result_data + result_offset + scanned;
+
+	// 			if (to_scan == BitpackingPrimitives::BITPACKING_ALGORITHM_GROUP_SIZE &&
+	// 			    offset_in_compression_group == 0) {
+	// 				// Decompress directly into result vector
+	// 				BitpackingPrimitives::UnPackBlock<T>(data_ptr_cast(current_result_ptr),
+	// 				                                     decompression_group_start_pointer, scan_state.current_width,
+	// 				                                     skip_sign_extend);
+	// 			} else {
+	// 				// Decompress compression algorithm to buffer
+	// 				BitpackingPrimitives::UnPackBlock<T>(data_ptr_cast(scan_state.decompression_buffer),
+	// 				                                     decompression_group_start_pointer, scan_state.current_width,
+	// 				                                     skip_sign_extend);
+
+	// 				memcpy(current_result_ptr, scan_state.decompression_buffer + offset_in_compression_group,
+	// 				       to_scan * sizeof(T));
+	// 			}
+
+	// 			if (scan_state.current_group.mode == BitpackingMode::DELTA_FOR) {
+	// 				ApplyFrameOfReference<T_S>(reinterpret_cast<T_S *>(current_result_ptr),
+	// 				                           static_cast<T_S>(scan_state.current_frame_of_reference), to_scan);
+	// 				DeltaDecode<T_S>(reinterpret_cast<T_S *>(current_result_ptr),
+	// 				                 static_cast<T_S>(scan_state.current_delta_offset), to_scan);
+	// 				scan_state.current_delta_offset = current_result_ptr[to_scan - 1];
+	// 			} else {
+	// 				ApplyFrameOfReference<T>(current_result_ptr, scan_state.current_frame_of_reference, to_scan);
+	// 			}
+
+	// 			scanned += to_scan;
+	// 			scan_state.current_group_offset += to_scan;
+	// 		}
+	// 	}
+	// 	if (state.decompressed_vector[state.vector_index]) {
+	// 		auto result_data = FlatVector::GetData<T>(result);
+	// 		auto decompressed_data = FlatVector::GetData<T>(*state.decompressed_vector[state.vector_index]);
+	// 		if (state.row_index) {
+	// 			for (auto index : *state.row_index) {
+	// 				// std::cout << index << " " << segment.start << " ";
+	// 				// std::cout << index << std::endl;
+	// 				result_data[index] = decompressed_data[row_id];
+	// 			}
+	// 		} else {
+	// 			// std::cout << result_idx << " " << segment.start << " ";
+	// 			// std::cout << result_idx << std::endl;
+	// 			result_data[result_idx] = decompressed_data[row_id];
+	// 			// std::cout << result_idx << " " << std::endl;
+	// 		}
+	// 	}
+	// 	return;
+	// }
+
 	BitpackingScanState<T> scan_state(segment);
 	scan_state.Skip(segment, NumericCast<idx_t>(row_id));
 

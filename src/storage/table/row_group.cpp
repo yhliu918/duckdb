@@ -692,8 +692,9 @@ void RowGroup::GetScalar(TransactionData transaction, CollectionScanState &state
                          int32_t fixed_string_len, ColumnFetchState &cfs) {
 	cfs.decompressed_vector.resize(50);
 	auto &column_data = GetColumn(project_column_id);
+	bool use_full_decompress = inverted_index.size() > (150 * column_data.GetColumnSegmentCount());
 	for (auto &[rowid, result_rowid] : inverted_index) {
-		column_data.FetchRowNew(transaction, cfs, rowid, result, result_rowid, fixed_string_len);
+		column_data.FetchRowNew(transaction, cfs, rowid, result, result_rowid, fixed_string_len, use_full_decompress);
 	}
 	for (auto &ptr : cfs.decompressed_vector) {
 		if (ptr) {
@@ -748,9 +749,9 @@ void RowGroup::GetScalar(TransactionData transaction, CollectionScanState &state
 		auto &column_data = GetColumn(col_idx);
 		if (fixed_len_strings_columns.find(result_col_idx) != fixed_len_strings_columns.end()) {
 			column_data.FetchRowNew(transaction, cfs, row_id, result.data[result_col_idx], result_rowid,
-			                        fixed_len_strings_columns[result_col_idx]);
+			                        fixed_len_strings_columns[result_col_idx], false);
 		} else {
-			column_data.FetchRowNew(transaction, cfs, row_id, result.data[result_col_idx], result_rowid, 0);
+			column_data.FetchRowNew(transaction, cfs, row_id, result.data[result_col_idx], result_rowid, 0, false);
 		}
 		// auto &column_data = *columns[col_idx];
 		// column_data.FetchRow(transaction, cfs, row_id, result.data[result_col_idx], result_rowid);

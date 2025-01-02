@@ -649,10 +649,12 @@ void FSSTStorage::StringScan(ColumnSegment &segment, ColumnScanState &state, idx
 //===--------------------------------------------------------------------===//
 // Fetch
 //===--------------------------------------------------------------------===//
+
 void FSSTStorage::StringFetchRow(ColumnSegment &segment, ColumnFetchState &state, row_t row_id, Vector &result,
                                  idx_t result_idx) {
 	if (state.full_decompression) {
 		if (!state.decompressed_vector[state.vector_index]) {
+			// auto start = std::chrono::high_resolution_clock::now();
 			int scan_count = segment.count.load();
 			state.decompressed_vector[state.vector_index] =
 			    make_uniq<Vector>(result.GetType(), true, false, scan_count);
@@ -703,6 +705,9 @@ void FSSTStorage::StringFetchRow(ColumnSegment &segment, ColumnFetchState &state
 					result_data[i] = string_t(nullptr, 0);
 				}
 			}
+			// auto end = std::chrono::high_resolution_clock::now();
+			// std::chrono::duration<double> duration = end - start;
+			// std::cout << duration.count() << std::endl;
 		}
 		if (state.decompressed_vector[state.vector_index]) {
 			auto result_data = FlatVector::GetData<string_t>(result);

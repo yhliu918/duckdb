@@ -538,8 +538,13 @@ int ColumnData::GetEntrySize() {
 	return data.nodes[0].node->type.InternalType() != PhysicalType::VARCHAR ? data.nodes[0].node->type_size : 0;
 }
 
+int ColumnData::GetColumnSegmentCount() {
+	int cnt = data.nodes.size();
+	return cnt;
+}
+
 void ColumnData::FetchRowNew(TransactionData transaction, ColumnFetchState &state, row_t row_id, Vector &result,
-                             idx_t result_idx, int32_t string_size) {
+                             idx_t result_idx, int32_t string_size, bool full_decompression) {
 	// auto segment = data.GetSegment(UnsafeNumericCast<idx_t>(row_id));
 	// __builtin_prefetch(&data.start_index, 0, 3);
 	ColumnSegment *segment = nullptr;
@@ -555,9 +560,13 @@ void ColumnData::FetchRowNew(TransactionData transaction, ColumnFetchState &stat
 	}
 	//! Currently, we fully decompress all data in the segment
 	//! FIX ME: later choose depending on the entry size
-	state.full_decompression = true;
+	state.full_decompression = full_decompression;
 
+	// auto start = std::chrono::high_resolution_clock::now();
 	segment->FetchRow(state, row_id, result, result_idx);
+	// auto end = std::chrono::high_resolution_clock::now();
+	// std::chrono::duration<double> duration = end - start;
+	// std::cout << duration.count() << std::endl;
 	// merge any updates made to this row
 
 	// FetchUpdateRow(transaction, row_id, result, result_idx);
