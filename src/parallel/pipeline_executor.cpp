@@ -62,7 +62,8 @@ bool PipelineExecutor::parse_materialize_config(Pipeline &pipeline_p, bool read_
 				int logical_type;
 				int string_length = 0;
 				int lines = 0;
-				file >> dependent_pipeline >> keep_rowid >> lines >> rowid_name;
+				int table_size;
+				file >> dependent_pipeline >> keep_rowid >> lines >> rowid_name >> table_size;
 				auto &chunk_layout = pipeline_p.operators.size() == 0
 				                         ? pipeline_p.source->names
 				                         : pipeline_p.operators[pipeline_p.operators.size() - 1].get().names;
@@ -81,7 +82,7 @@ bool PipelineExecutor::parse_materialize_config(Pipeline &pipeline_p, bool read_
 				}
 				if (!col_map.empty()) {
 					pipeline_p.SetMaterializeMap(materialize_strategy_mode, rowid_col_idx, dependent_pipeline,
-					                             keep_rowid, col_map, col_types, fixed_len_strings_columns);
+					                             keep_rowid, col_map, col_types, fixed_len_strings_columns, table_size);
 				}
 			}
 		}
@@ -265,14 +266,15 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 		for (auto &[rowid_col_idx, mat_map] : pipeline.materialize_maps) {
 			int reserve_size = 0;
 			if (mat_map.source_pipeline_id == pipeline.pipeline_id) {
-				reserve_size = pipeline.source.get()
-				                       ->Cast<PhysicalTableScan>()
-				                       .bind_data->Cast<TableScanBindData>()
-				                       .table.GetDataTable()
-				                       ->GetRowGroupCollection()
-				                       ->GetTotalRows() /
-				                   STANDARD_ROW_GROUPS_SIZE +
-				               1;
+				// reserve_size = pipeline.source.get()
+				//                        ->Cast<PhysicalTableScan>()
+				//                        .bind_data->Cast<TableScanBindData>()
+				//                        .table.GetDataTable()
+				//                        ->GetRowGroupCollection()
+				//                        ->GetTotalRows() /
+				//                    STANDARD_ROW_GROUPS_SIZE +
+				//                1;
+				reserve_size = mat_map.table_size / STANDARD_ROW_GROUPS_SIZE + 1;
 			} else {
 				reserve_size = pipeline.materialize_sources[mat_map.source_pipeline_id].table->GetTotalRows() /
 				                   STANDARD_ROW_GROUPS_SIZE +

@@ -129,12 +129,13 @@ public:
 
 	struct MaterializeMap {
 		MaterializeMap(int pipeid, bool keep_rowid, unordered_map<int64_t, int64_t> colid, map<int64_t, int8_t> types,
-		               unordered_map<int64_t, int32_t> string_columns) {
+		               unordered_map<int64_t, int32_t> string_columns, int table_size) {
 			this->source_pipeline_id = pipeid;
 			this->keep_rowid = keep_rowid;
 			this->materialize_column_ids = move(colid);
 			this->materialize_column_types = move(types);
 			this->fixed_len_strings_columns = move(string_columns);
+			this->table_size = table_size;
 		}
 		MaterializeMap() = default;
 		MaterializeMap &operator=(MaterializeMap &&map) noexcept {
@@ -144,6 +145,7 @@ public:
 				this->materialize_column_ids = move(map.materialize_column_ids);
 				this->materialize_column_types = move(map.materialize_column_types);
 				this->fixed_len_strings_columns = move(map.fixed_len_strings_columns);
+				this->table_size = map.table_size;
 			}
 			return *this;
 		}
@@ -153,9 +155,11 @@ public:
 			this->materialize_column_ids = move(map.materialize_column_ids);
 			this->materialize_column_types = move(map.materialize_column_types);
 			this->fixed_len_strings_columns = move(map.fixed_len_strings_columns);
+			this->table_size = map.table_size;
 		}
 		int source_pipeline_id;
 		bool keep_rowid;
+		int table_size = 0;
 		unordered_map<int64_t, int64_t> materialize_column_ids;
 		map<int64_t, int8_t> materialize_column_types;
 		unordered_map<int64_t, int32_t> fixed_len_strings_columns;
@@ -163,11 +167,11 @@ public:
 
 	void SetMaterializeMap(int strategy, int col_idx, int pipeline_id, bool keep_rowid,
 	                       unordered_map<int64_t, int64_t> colid, map<int64_t, int8_t> types,
-	                       unordered_map<int64_t, int32_t> string_columns) {
+	                       unordered_map<int64_t, int32_t> string_columns, int table_size) {
 		materialize_strategy_mode = strategy;
 		materialize_flag = true;
 		materialize_maps[col_idx] =
-		    MaterializeMap(pipeline_id, keep_rowid, move(colid), move(types), move(string_columns));
+		    MaterializeMap(pipeline_id, keep_rowid, move(colid), move(types), move(string_columns), table_size);
 	}
 
 	bool materialize_flag = false;

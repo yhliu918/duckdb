@@ -9,7 +9,6 @@
 
 using namespace duckdb;
 using json = nlohmann::json;
-#define QUEUE_THR 25
 
 bool file_exists(const std::string &path) {
 	struct stat buffer;
@@ -175,7 +174,7 @@ find_materialize_position(std::vector<std::string> attribute, std::unordered_map
 void write_materialize_config(std::unordered_map<int, std::vector<std::string>> &materialize_config,
                               std::unordered_map<int, bool> &push_source,
                               unordered_map<std::string, int> &from_pipeline, std::vector<std::string> attribute,
-                              int materialize_strategy_mode = 1) {
+                              int materialize_strategy_mode = 1, int queue_threshold = 100) {
 	for (json::iterator it = schema.begin(); it != schema.end(); ++it) {
 		std::ofstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/table" + it.key(),
 		                   std::ios::out);
@@ -230,12 +229,13 @@ void write_materialize_config(std::unordered_map<int, std::vector<std::string>> 
 			push_src = push_source[pos];
 		}
 
-		pipeline_file << materialize_strategy_mode << " " << push_src << " " << QUEUE_THR << std::endl;
+		pipeline_file << materialize_strategy_mode << " " << push_src << " " << queue_threshold << std::endl;
 		pipeline_file << from_pipeline_to_attr.size() << std::endl;
 		for (auto &[pipeline, attrs] : from_pipeline_to_attr) {
 			//! fix me: keep_rowid is 1 for now
 			std::string table_name = plan[std::to_string(pipeline)]["table"];
-			pipeline_file << pipeline << " 1 " << attrs.size() << " rowid(" << table_name << ")" << std::endl;
+			pipeline_file << pipeline << " 1 " << attrs.size() << " rowid(" << table_name << ") "
+			              << schema[table_name]["table_size"] << std::endl;
 			for (auto &attr : attrs) {
 				int colid_in_basetable = schema[table_name][attr]["col_id"];
 				int attri_type = schema[table_name][attr]["type"];
@@ -257,7 +257,7 @@ void write_materialize_config(std::unordered_map<int, std::vector<std::string>> 
 		    "/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/pipeline" + std::to_string(pipeid);
 		if (!file_exists(path)) {
 			std::ofstream pipeline_file(path, std::ios::out);
-			pipeline_file << "0 " << push_src << " " << QUEUE_THR << std::endl;
+			pipeline_file << "0 " << push_src << " " << queue_threshold << std::endl;
 			pipeline_file << "0" << std::endl;
 		}
 	}
@@ -295,27 +295,35 @@ int main(int argc, char *argv[]) {
 	// std::cout << query << std::endl;
 
 	bool dump = false;
-	if (argc > 5) {
-		dump = std::stoi(argv[5]);
-	}
+	dump = std::stoi(argv[5]);
+
 	if (setenv("DUMP_PIPELINE_INFO", std::to_string(dump).c_str(), 1) != 0) {
 		std::cerr << "Failed to set environment variable" << std::endl;
 		return 1;
+	}
+	bool compressed_storage = false;
+	if (argc > 6) {
+		compressed_storage = std::stoi(argv[6]);
 	}
 
 	std::string config_directory = "/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/";
 
 	std::string materialize_info = "/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/materialize_info";
 	int mat_info_id = 0;
-	if (argc > 6) {
-		mat_info_id = std::stoi(argv[6]);
+	if (argc > 7) {
+		mat_info_id = std::stoi(argv[7]);
 	}
 
 	std::string mat_file = materialize_info + std::to_string(mat_info_id);
 
 	int mat_strategy = 0;
-	if (argc > 7) {
-		mat_strategy = std::stoi(argv[7]);
+	if (argc > 8) {
+		mat_strategy = std::stoi(argv[8]);
+	}
+
+	int materialize_queue_thr = 100;
+	if (argc > 9) {
+		materialize_queue_thr = std::stoi(argv[9]);
 	}
 
 	// std::cout << "Warning: will remove all content files in the config directory first" << std::endl;
@@ -331,10 +339,6 @@ int main(int argc, char *argv[]) {
 		cmd_result = system(command.c_str());
 	}
 
-	DuckDB db("/home/yihao/duckdb/origin/duckdb/release/job_uncomtest.db");
-	Connection con(db);
-	con.Query("SET threads TO " + thread + ";");
-	con.Query("SET disabled_optimizers = 'COMPRESSED_MATERIALIZATION';");
 	bool include_aggregate = false;
 	std::string select_keys = query.substr(0, query.find("from"));
 	if (select_keys.find("count") != std::string::npos || select_keys.find("sum") != std::string::npos ||
@@ -344,17 +348,42 @@ int main(int argc, char *argv[]) {
 	}
 	std::string left_query = query.substr(query.find("from"));
 
-	if (dump) {
-		double start = getNow();
-		// std::cout << query << std::endl;
-		auto result = con.Query(query);
-		double end = getNow();
-		if (print_result) {
-			result->Print();
+	DuckDB db("/home/yihao/duckdb/origin/duckdb/release/job_uncomtest.db");
+	Connection con(db);
+	con.Query("SET threads TO " + thread + ";");
+	con.Query("SET disabled_optimizers = 'COMPRESSED_MATERIALIZATION';");
+
+	DuckDB db_com("/home/yihao/duckdb/origin/duckdb/release/job_com.db");
+	Connection con2(db_com);
+	con2.Query("SET threads TO " + thread + ";");
+	con2.Query("SET disabled_optimizers = 'COMPRESSED_MATERIALIZATION';");
+
+	if (compressed_storage) {
+		if (dump) {
+			double start = getNow();
+			// std::cout << query << std::endl;
+			auto result = con2.Query(query);
+			double end = getNow();
+			if (print_result) {
+				result->Print();
+			}
+			result->PrintRowNumber();
+			std::cout << "early materialize: 0 ";
+			std::cout << thread << " " << end - start << std::endl;
 		}
-		result->PrintRowNumber();
-		std::cout << "early materialize: 0 ";
-		std::cout << thread << " " << end - start << std::endl;
+	} else {
+		if (dump) {
+			double start = getNow();
+			// std::cout << query << std::endl;
+			auto result = con.Query(query);
+			double end = getNow();
+			if (print_result) {
+				result->Print();
+			}
+			result->PrintRowNumber();
+			std::cout << "early materialize: 0 ";
+			std::cout << thread << " " << end - start << std::endl;
+		}
 	}
 	auto all_attributes = parse_plan();
 	std::vector<std::string> all_attributes_unique;
@@ -426,16 +455,29 @@ int main(int argc, char *argv[]) {
 		std::string command = "rm " + config_directory + "*";
 		int cmd_result = system(command.c_str());
 	}
-	write_materialize_config(materialize_pos, push_source, from_pipeline, materialize_keys, mat_strategy);
+	write_materialize_config(materialize_pos, push_source, from_pipeline, materialize_keys, mat_strategy,
+	                         materialize_queue_thr);
 
-	double start = getNow();
-	auto result = con.Query(query);
-	double end = getNow();
-	if (print_result) {
-		result->Print();
+	if (compressed_storage) {
+		double start = getNow();
+		auto result = con2.Query(query);
+		double end = getNow();
+		if (print_result) {
+			result->Print();
+		}
+		result->PrintRowNumber();
+		std::cout << attribute << " " << materialize_pipeline_id << " ";
+		std::cout << thread << " " << end - start << std::endl;
+	} else {
+		double start = getNow();
+		auto result = con.Query(query);
+		double end = getNow();
+		if (print_result) {
+			result->Print();
+		}
+		result->PrintRowNumber();
+		std::cout << attribute << " " << materialize_pipeline_id << " ";
+		std::cout << thread << " " << end - start << std::endl;
 	}
-	result->PrintRowNumber();
-	std::cout << attribute << " " << materialize_pipeline_id << " ";
-	std::cout << thread << " " << end - start << std::endl;
 	exit(0);
 }

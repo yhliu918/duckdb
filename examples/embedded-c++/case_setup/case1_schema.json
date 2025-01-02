@@ -3,7 +3,8 @@
         "A.k1": {
             "col_id": 0,
             "type": 14
-        }
+        },
+        "table_size": 10000000
     },
     "B": {
         "B.k1": {
@@ -17,7 +18,8 @@
         "rowid(B)": {
             "col_id": 2,
             "type": 14
-        }
+        },
+        "table_size": 6000000
     },
     "C": {
         "C.k2": {
@@ -31,6 +33,7 @@
         "rowid(C)": {
             "col_id": 2,
             "type": 14
-        }
+        },
+        "table_size": 4000000
     }
 }

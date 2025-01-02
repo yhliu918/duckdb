@@ -236,7 +236,8 @@ void write_materialize_config(std::unordered_map<int, std::vector<std::string>> 
 		for (auto &[pipeline, attrs] : from_pipeline_to_attr) {
 			//! fix me: keep_rowid is 1 for now
 			std::string table_name = plan[std::to_string(pipeline)]["table"];
-			pipeline_file << pipeline << " 1 " << attrs.size() << " rowid(" << table_name << ")" << std::endl;
+			pipeline_file << pipeline << " 1 " << attrs.size() << " rowid(" << table_name << ") "
+			              << schema[table_name]["table_size"] << std::endl;
 			for (auto &attr : attrs) {
 				int colid_in_basetable = schema[table_name][attr]["col_id"];
 				int attri_type = schema[table_name][attr]["type"];

@@ -11,7 +11,7 @@ double getNow() {
 	return tv.tv_sec * 1000.0 + tv.tv_usec / 1000.0;
 }
 void write_config(std::vector<string> payload, std::vector<int> type, int mat_strat, std::string build_name,
-                  int queue_thr = 100, int string_length = 0) {
+                  int build_size, int queue_thr = 100, int string_length = 0) {
 	std::ofstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/op_mat_3", std::ios::out);
 	if (file.is_open()) {
 		for (auto &attr : payload) {
@@ -36,8 +36,8 @@ void write_config(std::vector<string> payload, std::vector<int> type, int mat_st
 	if (file_pipeline1.is_open()) {
 		file_pipeline1 << mat_strat << " " << 0 << " " << queue_thr << std::endl;
 		file_pipeline1 << 1 << std::endl;
-		file_pipeline1 << 2 << " " << 0 << " " << payload.size() << " " << build_name + ".build_side_rowid"
-		               << std::endl;
+		file_pipeline1 << 2 << " " << 0 << " " << payload.size() << " " << build_name + ".build_side_rowid "
+		               << build_size << std::endl;
 		for (int i = 0; i < payload.size(); i++) {
 			file_pipeline1 << build_name + "." + payload[i] << " " << 2 + i << " " << type[i];
 			if (type[i] == 25) {
@@ -125,7 +125,7 @@ int main(int argc, char *argv[]) {
 		project_keys += "build_side_rowid";
 		std::string query = "select " + project_keys + " from probe,build where build_key = probe_key;";
 		if (mat_stat) {
-			write_config(payload, types, mat_stat, build_file_name, queue_thr, string_length);
+			write_config(payload, types, mat_stat, build_file_name, build_size, queue_thr, string_length);
 		}
 		double start = getNow();
 		std::cout << query << std::endl;
@@ -157,7 +157,7 @@ int main(int argc, char *argv[]) {
 		                    " where build_key = probe_key;";
 		std::cout << query << std::endl;
 		if (mat_stat) {
-			write_config(payload, types, mat_stat, build_file_name, queue_thr, string_length);
+			write_config(payload, types, mat_stat, build_file_name, build_size, queue_thr, string_length);
 		}
 		// int a;
 		// std::cout << "input a to continue" << std::endl;
@@ -195,7 +195,7 @@ int main(int argc, char *argv[]) {
 		                    " where build_key = probe_key;";
 		std::cout << query << std::endl;
 		if (mat_stat) {
-			write_config(payload, types, mat_stat, build_file_name, queue_thr, string_length);
+			write_config(payload, types, mat_stat, build_file_name, build_size, queue_thr, string_length);
 		}
 
 		// int a;
