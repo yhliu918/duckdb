@@ -24,6 +24,7 @@ json schema;
 json plan;
 std::string current_path_str = "/home/yihao/duckdb/ht_tmp/duckdb/examples/embedded-c++/";
 std::string path_str = current_path_str + "release/";
+std::string benchmark_name = "ssb";
 
 std::unordered_set<std::string> parse_plan() {
 
@@ -72,7 +73,7 @@ std::unordered_set<std::string> parse_plan() {
 std::unordered_map<std::string, vector<int>>
 find_materialize_position(std::vector<std::string> attribute, std::unordered_map<std::string, int> &from_pipeline,
                           std::unordered_set<std::string> &table_names) {
-	std::ifstream file(path_str + "query/job_schema.json");
+	std::ifstream file(path_str + "query/" + benchmark_name + "_schema.json");
 	file >> schema;
 	file.close();
 	std::unordered_map<std::string, bool> correct_mat_key;
@@ -271,10 +272,8 @@ int main(int argc, char *argv[]) {
 	}
 	std::string pipeline_config = query_config_path + "pipeline1.json";
 
-	std::string query_file = "tmp";
-	if (argc > 4) {
-		query_file = argv[4];
-	}
+	std::string query_file = argv[4];
+
 	query_file = query_config_path + query_file;
 	// std::cout << query_file << std::endl;
 	std::ifstream query_file_stream(query_file, std::ios::in);
@@ -283,38 +282,38 @@ int main(int argc, char *argv[]) {
 	while (std::getline(query_file_stream, line)) {
 		query += line + " ";
 	}
-	// std::cout << query << std::endl;
-
+	std::cout << query << std::endl;
+	benchmark_name = argv[5];
 	bool dump = false;
-	dump = std::stoi(argv[5]);
+	dump = std::stoi(argv[6]);
 
 	if (setenv("DUMP_PIPELINE_INFO", std::to_string(dump).c_str(), 1) != 0) {
 		std::cerr << "Failed to set environment variable" << std::endl;
 		return 1;
 	}
 	bool compressed_storage = false;
-	if (argc > 6) {
-		compressed_storage = std::stoi(argv[6]);
+	if (argc > 7) {
+		compressed_storage = std::stoi(argv[7]);
 	}
 
 	std::string config_directory = path_str + "config/";
 
 	std::string materialize_info = path_str + "materialize_info";
 	int mat_info_id = 0;
-	if (argc > 7) {
-		mat_info_id = std::stoi(argv[7]);
+	if (argc > 8) {
+		mat_info_id = std::stoi(argv[8]);
 	}
 
 	std::string mat_file = materialize_info + std::to_string(mat_info_id);
 
 	int mat_strategy = 0;
-	if (argc > 8) {
-		mat_strategy = std::stoi(argv[8]);
+	if (argc > 9) {
+		mat_strategy = std::stoi(argv[9]);
 	}
 
 	int materialize_queue_thr = 100;
-	if (argc > 9) {
-		materialize_queue_thr = std::stoi(argv[9]);
+	if (argc > 10) {
+		materialize_queue_thr = std::stoi(argv[10]);
 	}
 
 	// std::cout << "Warning: will remove all content files in the config directory first" << std::endl;
@@ -339,12 +338,12 @@ int main(int argc, char *argv[]) {
 	}
 	std::string left_query = query.substr(query.find("from"));
 
-	DuckDB db("/home/yihao/duckdb/origin/duckdb/release/job_uncomtest.db");
+	DuckDB db("/home/yihao/duckdb/origin/duckdb/release/" + benchmark_name + "_uncom.db");
 	Connection con(db);
 	con.Query("SET threads TO " + thread + ";");
 	con.Query("SET disabled_optimizers = 'COMPRESSED_MATERIALIZATION';");
 
-	DuckDB db_com("/home/yihao/duckdb/origin/duckdb/release/job_com.db");
+	DuckDB db_com("/home/yihao/duckdb/origin/duckdb/release/" + benchmark_name + ".db");
 	Connection con2(db_com);
 	con2.Query("SET threads TO " + thread + ";");
 	con2.Query("SET disabled_optimizers = 'COMPRESSED_MATERIALIZATION';");

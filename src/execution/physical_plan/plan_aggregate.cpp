@@ -9,6 +9,7 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/parser/expression/comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_aggregate_expression.hpp"
+#include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/operator/logical_aggregate.hpp"
 
@@ -148,6 +149,17 @@ static bool CanUsePerfectHashAggregate(ClientContext &context, LogicalAggregate 
 	}
 	return true;
 }
+void parse_bound_function(const unique_ptr<Expression> &expr, std::vector<int> &op_str) {
+	auto &bound_func = expr->Cast<BoundFunctionExpression>();
+	for (auto &child : bound_func.children) {
+		if (child->type == ExpressionType::BOUND_REF) {
+			auto &bound_ref = child->Cast<BoundReferenceExpression>();
+			op_str.push_back(bound_ref.index);
+		} else if (child->type == ExpressionType::BOUND_FUNCTION) {
+			parse_bound_function(child, op_str);
+		}
+	}
+}
 
 unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalAggregate &op) {
 	unique_ptr<PhysicalOperator> groupby;
@@ -162,6 +174,13 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalAggregate 
 		if (expr->type == ExpressionType::BOUND_REF) {
 			auto &bound_ref = (BoundReferenceExpression &)*expr;
 			projection.disable_columns.push_back(projection.children[0]->disable_columns[bound_ref.index]);
+		} else if (expr->type == ExpressionType::BOUND_FUNCTION) {
+			auto &bound_ref = (BoundFunctionExpression &)*expr;
+			std::vector<int> op_str_func;
+			parse_bound_function(expr, op_str_func);
+			for (auto &idx : op_str_func) {
+				projection.disable_columns.push_back(projection.children[0]->disable_columns[idx]);
+			}
 		}
 	}
 	projection.output_disable_columns = projection.disable_columns;

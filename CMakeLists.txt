@@ -131,9 +131,9 @@ option(ENABLE_EXTENSION_AUTOLOADING "Enable extension auto-loading by default." 
 option(ENABLE_EXTENSION_AUTOINSTALL "Enable extension auto-installing by default." FALSE)
 option(EXTENSION_TESTS_ONLY "Only load the tests for extensions, don't actually build them; useful for testing loadable extensions" FALSE)
 option(WASM_LOADABLE_EXTENSIONS "WebAssembly build with loadable extensions." FALSE)
-option(ENABLE_SANITIZER "Enable address sanitizer." TRUE)
+option(ENABLE_SANITIZER "Enable address sanitizer." FALSE)
 option(ENABLE_THREAD_SANITIZER "Enable thread sanitizer." FALSE)
-option(ENABLE_UBSAN "Enable undefined behavior sanitizer." TRUE)
+option(ENABLE_UBSAN "Enable undefined behavior sanitizer." FALSE)
 option(DISABLE_VPTR_SANITIZER "Disable vptr sanitizer; work-around for sanitizer false positive on Macbook M1" FALSE)
 option(
   FORCE_SANITIZER
@@ -626,6 +626,7 @@ include_directories(third_party/mbedtls/include)
 include_directories(third_party/jaro_winkler)
 include_directories(third_party/yyjson/include)
 include_directories(third_party/nlohmann)
+include_directories(third_party/emhash)
 
 # todo only regenerate ub file if one of the input files changed hack alert
 function(enable_unity_build UB_SUFFIX SOURCE_VARIABLE_NAME)

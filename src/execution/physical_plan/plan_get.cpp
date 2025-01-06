@@ -184,7 +184,7 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalGet &op) {
 		if (op.GetTable().get() != nullptr) {
 			table_name = op.GetTable()->GetStorage().GetTableName();
 		}
-		std::ifstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/table" + table_name,
+		std::ifstream file("/home/yihao/duckdb/ht_tmp/duckdb/examples/embedded-c++/release/config/table" + table_name,
 		                   std::ios::in);
 		vector<int> del_column;
 		int column_id;
@@ -201,7 +201,7 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalGet &op) {
 			}
 		}
 		flag = false;
-		// std::ofstream file_out("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/table_scan" +
+		// std::ofstream file_out("/home/yihao/duckdb/ht_tmp/duckdb/examples/embedded-c++/release/config/table_scan" +
 		//                            std::to_string(op.table_index),
 		//                        std::ios::out);
 		// for (auto &column_id : column_ids) {
@@ -266,14 +266,22 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalGet &op) {
 					}
 				}
 			}
+			unique_ptr<TableFilterSet> table_filters_new = make_uniq<TableFilterSet>();
+			if (!op.table_filters.filters.empty()) {
+				for (auto &[idx, filter] : table_filters->filters) {
+					int column_idx_new = std::find(column_ids_new.begin(), column_ids_new.end(), column_ids[idx]) -
+					                     column_ids_new.begin();
+					table_filters_new->filters[column_idx_new] = std::move(table_filters->filters[idx]);
+				}
+			}
 
 			// for (auto &i : op.projection_ids) {
 			// 	op.types.push_back(op.returned_types[column_ids[i]]);
 			// }
-			auto node = make_uniq<PhysicalTableScan>(op.types, op.function, std::move(op.bind_data), op.returned_types,
-			                                         column_ids, projection_ids_old, op.names, std::move(table_filters),
-			                                         op.estimated_cardinality, op.extra_info, std::move(op.parameters),
-			                                         table_name, std::move(disable_column), projection_ids_new);
+			auto node = make_uniq<PhysicalTableScan>(
+			    op.types, op.function, std::move(op.bind_data), op.returned_types, column_ids, projection_ids_old,
+			    op.names, std::move(table_filters_new), op.estimated_cardinality, op.extra_info,
+			    std::move(op.parameters), table_name, std::move(disable_column), projection_ids_new);
 			// node->disable_columns = std::move(disable_column);
 
 			node->dynamic_filters = op.dynamic_filters;

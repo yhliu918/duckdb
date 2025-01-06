@@ -254,7 +254,7 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalOperator &
 	}
 
 	std::ifstream infile;
-	infile.open("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/op_mat_" +
+	infile.open("/home/yihao/duckdb/ht_tmp/duckdb/examples/embedded-c++/release/config/op_mat_" +
 	                std::to_string(plan->operator_index),
 	            std::ios::in);
 	if (infile.is_open() && plan->type != PhysicalOperatorType::TRANSACTION &&
@@ -272,7 +272,7 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalOperator &
 	}
 
 	std::ifstream disable_columns_file;
-	disable_columns_file.open("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/op_dis_" +
+	disable_columns_file.open("/home/yihao/duckdb/ht_tmp/duckdb/examples/embedded-c++/release/config/op_dis_" +
 	                              std::to_string(plan->operator_index),
 	                          std::ios::in);
 	if (disable_columns_file.is_open() && plan->type != PhysicalOperatorType::TRANSACTION &&
@@ -371,11 +371,32 @@ std::string PhysicalPlanGenerator::PrintOperator(const unique_ptr<PhysicalOperat
 		}
 		break;
 	}
+	case PhysicalOperatorType::FILTER: {
+		int i = 0;
+		for (auto &type : plan->types) {
+			op_str += "(" + std::to_string(i) + ", " + type.ToString() + ", " +
+			          std::to_string(plan->disable_columns[i]) + " ," + plan->names[i] + ")\n";
+			i++;
+		}
+		break;
+	}
 	default:
 		std::cout << "Unknown operator type: " << PhysicalOperatorToString(plan->type) << std::endl;
 		break;
 	}
 	return op_str;
+}
+
+void parse_bound_function(const unique_ptr<Expression> &expr, std::vector<idx_t> &op_str) {
+	auto &bound_func = expr->Cast<BoundFunctionExpression>();
+	for (auto &child : bound_func.children) {
+		if (child->type == ExpressionType::BOUND_REF) {
+			auto &bound_ref = child->Cast<BoundReferenceExpression>();
+			op_str.push_back(bound_ref.index);
+		} else if (child->type == ExpressionType::BOUND_FUNCTION) {
+			parse_bound_function(child, op_str);
+		}
+	}
 }
 
 std::vector<std::string> PhysicalPlanGenerator::PrintOperatorCatalog(const unique_ptr<PhysicalOperator> &plan) {
@@ -431,6 +452,18 @@ std::vector<std::string> PhysicalPlanGenerator::PrintOperatorCatalog(const uniqu
 			if (expr->type == ExpressionType::BOUND_REF) {
 				auto &bound_ref = (BoundReferenceExpression &)*expr;
 				op_str.push_back(op_str_child[bound_ref.index]);
+			} else if (expr->type == ExpressionType::BOUND_FUNCTION) {
+				auto &bound_ref = (BoundFunctionExpression &)*expr;
+				std::vector<idx_t> op_str_func;
+				parse_bound_function(expr, op_str_func);
+				for (auto &idx : op_str_func) {
+					op_str.push_back(op_str_child[idx]);
+				}
+				// for (auto &child : bound_ref.children) {
+				// 	auto &bound_ref_child = child->Cast<BoundReferenceExpression>();
+				// 	op_str.push_back(op_str_child[bound_ref_child.index]);
+				// }
+				// op_str.push_back("bound_function");
 			}
 		}
 		break;

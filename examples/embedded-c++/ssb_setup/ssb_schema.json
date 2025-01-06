@@ -1,0 +1,269 @@
+{
+    "dim_date": {
+        "dim_date.d_datekey": {
+            "col_id": 0,
+            "type": 13
+        },
+        "dim_date.d_date": {
+            "col_id": 1,
+            "type": 25
+        },
+        "dim_date.d_dayofweek": {
+            "col_id": 2,
+            "type": 25
+        },
+        "dim_date.d_month": {
+            "col_id": 3,
+            "type": 25
+        },
+        "dim_date.d_year": {
+            "col_id": 4,
+            "type": 13
+        },
+        "dim_date.d_yearmonthnum": {
+            "col_id": 5,
+            "type": 13
+        },
+        "dim_date.d_yearmonth": {
+            "col_id": 6,
+            "type": 25
+        },
+        "dim_date.d_daynuminweek": {
+            "col_id": 7,
+            "type": 13
+        },
+        "dim_date.d_daynuminmonth": {
+            "col_id": 8,
+            "type": 13
+        },
+        "dim_date.d_daynuminyear": {
+            "col_id": 9,
+            "type": 13
+        },
+        "dim_date.d_monthnuminyear": {
+            "col_id": 10,
+            "type": 13
+        },
+        "dim_date.d_weeknuminyear": {
+            "col_id": 11,
+            "type": 13
+        },
+        "dim_date.d_sellingseason": {
+            "col_id": 12,
+            "type": 25
+        },
+        "dim_date.d_lastdayinweekfl": {
+            "col_id": 13,
+            "type": 13
+        },
+        "dim_date.d_lastdayinmonthfl": {
+            "col_id": 14,
+            "type": 13
+        },
+        "dim_date.d_holidayfl": {
+            "col_id": 15,
+            "type": 13
+        },
+        "dim_date.d_weekdayfl": {
+            "col_id": 16,
+            "type": 13
+        },
+        "rowid(dim_date)": {
+            "col_id": 17,
+            "type": 13
+        },
+        "table_size": 2556
+    },
+    "customer": {
+        "customer.c_custkey": {
+            "col_id": 0,
+            "type": 13
+        },
+        "customer.c_name": {
+            "col_id": 1,
+            "type": 25
+        },
+        "customer.c_address": {
+            "col_id": 2,
+            "type": 25
+        },
+        "customer.c_city": {
+            "col_id": 3,
+            "type": 25
+        },
+        "customer.c_nation": {
+            "col_id": 4,
+            "type": 25
+        },
+        "customer.c_region": {
+            "col_id": 5,
+            "type": 25
+        },
+        "customer.c_phone": {
+            "col_id": 6,
+            "type": 25
+        },
+        "customer.c_mktsegment": {
+            "col_id": 7,
+            "type": 25
+        },
+        "rowid(customer)": {
+            "col_id": 8,
+            "type": 13
+        },
+        "table_size": 30000
+    },
+    "part": {
+        "part.p_partkey": {
+            "col_id": 0,
+            "type": 13
+        },
+        "part.p_name": {
+            "col_id": 1,
+            "type": 25
+        },
+        "part.p_mfgr": {
+            "col_id": 2,
+            "type": 25
+        },
+        "part.p_category": {
+            "col_id": 3,
+            "type": 25
+        },
+        "part.p_brand1": {
+            "col_id": 4,
+            "type": 25
+        },
+        "part.p_color": {
+            "col_id": 5,
+            "type": 25
+        },
+        "part.p_type": {
+            "col_id": 6,
+            "type": 25
+        },
+        "part.p_size": {
+            "col_id": 7,
+            "type": 13
+        },
+        "part.p_container": {
+            "col_id": 8,
+            "type": 25
+        },
+        "rowid(part)": {
+            "col_id": 9,
+            "type": 13
+        },
+        "table_size": 200000
+    },
+    "supplier": {
+        "supplier.s_suppkey": {
+            "col_id": 0,
+            "type": 13
+        },
+        "supplier.s_name": {
+            "col_id": 1,
+            "type": 25
+        },
+        "supplier.s_address": {
+            "col_id": 2,
+            "type": 25
+        },
+        "supplier.s_city": {
+            "col_id": 3,
+            "type": 25
+        },
+        "supplier.s_nation": {
+            "col_id": 4,
+            "type": 25
+        },
+        "supplier.s_region": {
+            "col_id": 5,
+            "type": 25
+        },
+        "supplier.s_phone": {
+            "col_id": 6,
+            "type": 25
+        },
+        "rowid(supplier)": {
+            "col_id": 7,
+            "type": 13
+        },
+        "table_size": 2000
+    },
+    "lineorder": {
+        "lineorder.lo_orderkey": {
+            "col_id": 0,
+            "type": 13
+        },
+        "lineorder.lo_linenumber": {
+            "col_id": 1,
+            "type": 13
+        },
+        "lineorder.lo_custkey": {
+            "col_id": 2,
+            "type": 13
+        },
+        "lineorder.lo_partkey": {
+            "col_id": 3,
+            "type": 13
+        },
+        "lineorder.lo_suppkey": {
+            "col_id": 4,
+            "type": 13
+        },
+        "lineorder.lo_orderdate": {
+            "col_id": 5,
+            "type": 13
+        },
+        "lineorder.lo_orderpriority": {
+            "col_id": 6,
+            "type": 25
+        },
+        "lineorder.lo_shippriority": {
+            "col_id": 7,
+            "type": 25
+        },
+        "lineorder.lo_quantity": {
+            "col_id": 8,
+            "type": 13
+        },
+        "lineorder.lo_extendedprice": {
+            "col_id": 9,
+            "type": 13
+        },
+        "lineorder.lo_ordtotalprice": {
+            "col_id": 10,
+            "type": 13
+        },
+        "lineorder.lo_discount": {
+            "col_id": 11,
+            "type": 13
+        },
+        "lineorder.lo_revenue": {
+            "col_id": 12,
+            "type": 13
+        },
+        "lineorder.lo_supplycost": {
+            "col_id": 13,
+            "type": 13
+        },
+        "lineorder.lo_tax": {
+            "col_id": 14,
+            "type": 13
+        },
+        "lineorder.lo_commitdate": {
+            "col_id": 15,
+            "type": 13
+        },
+        "lineorder.lo_shipmode": {
+            "col_id": 16,
+            "type": 25
+        },
+        "rowid(lineorder)": {
+            "col_id": 17,
+            "type": 13
+        },
+        "table_size": 6001215
+    }
+}

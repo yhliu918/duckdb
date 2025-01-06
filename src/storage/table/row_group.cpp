@@ -585,6 +585,9 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 					int output_idx =
 					    std::find(column_ids_total.begin(), column_ids_total.end(), filter.table_column_index) -
 					    column_ids_total.begin();
+					if (result.data.size() < column_ids_total.size()) {
+						output_idx = scan_idx;
+					}
 					// output_idx = scan_idx;
 					auto &col_data = GetColumn(filter.table_column_index);
 					col_data.Select(transaction, state.vector_index, state.column_scans[scan_idx],
@@ -597,6 +600,10 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 					int output_idx =
 					    std::find(column_ids_total.begin(), column_ids_total.end(), table_filter.table_column_index) -
 					    column_ids_total.begin();
+					if (result.data.size() < column_ids_total.size()) {
+						output_idx = table_filter.scan_column_index;
+					}
+					// output_idx = table_filter.scan_column_index;
 					result.data[output_idx].Slice(sel, approved_tuple_count);
 				}
 			}

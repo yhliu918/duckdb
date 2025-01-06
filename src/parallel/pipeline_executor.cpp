@@ -30,7 +30,7 @@ double getNow() {
 	return tv.tv_sec * 1000.0 + tv.tv_usec / 1000.0;
 }
 bool PipelineExecutor::parse_materialize_config(Pipeline &pipeline_p, bool read_mat_info) {
-	std::ifstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/pipeline" +
+	std::ifstream file("/home/yihao/duckdb/ht_tmp/duckdb/examples/embedded-c++/release/config/pipeline" +
 	                       std::to_string(pipeline_p.pipeline_id),
 	                   std::ios::in);
 	int materialize_strategy_mode = 0;
@@ -128,9 +128,9 @@ void PipelineExecutor::dump_pipeline_info(Pipeline &pipeline_p) {
 		op_index++;
 	}
 	auto sink = pipeline_p.GetSink();
-	if (sink &&
-	    (sink->type == PhysicalOperatorType::RESULT_COLLECTOR ||
-	     sink->type == PhysicalOperatorType::UNGROUPED_AGGREGATE || sink->type == PhysicalOperatorType::ORDER_BY)) {
+	if (sink && (sink->type == PhysicalOperatorType::RESULT_COLLECTOR ||
+	             sink->type == PhysicalOperatorType::UNGROUPED_AGGREGATE ||
+	             sink->type == PhysicalOperatorType::ORDER_BY || sink->type == PhysicalOperatorType::HASH_GROUP_BY)) {
 		auto &last_op = pipeline_p.operators.empty() ? *pipeline_p.source : pipeline_p.operators.back().get();
 		for (int i = 0; i < last_op.names.size(); i++) {
 			must_enable_columns_when_end.insert(last_op.names[i]);
@@ -149,7 +149,7 @@ void PipelineExecutor::dump_pipeline_info(Pipeline &pipeline_p) {
 		j["table"] = pipeline_p.GetSource()->Cast<PhysicalTableScan>().table_name;
 	}
 
-	std::ofstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/query/pipeline" +
+	std::ofstream file("/home/yihao/duckdb/ht_tmp/duckdb/examples/embedded-c++/release/query/pipeline" +
 	                       std::to_string(pipeline_p.pipeline_id) + ".json",
 	                   std::ios::out);
 	if (file.is_open()) {
@@ -190,7 +190,7 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 		}
 		if (pipeline.sink->type == PhysicalOperatorType::HASH_JOIN ||
 		    pipeline.sink->type == PhysicalOperatorType::RESULT_COLLECTOR) {
-			std::ifstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/pipeline_dop" +
+			std::ifstream file("/home/yihao/duckdb/ht_tmp/duckdb/examples/embedded-c++/release/pipeline_dop" +
 			                       std::to_string(pipeline.pipeline_id),
 			                   std::ios::in);
 			if (file.is_open()) {
@@ -288,7 +288,14 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 			result_index[rowid_col_idx] = 0;
 		}
 	}
+	int source_chunk_num = pipeline.chunk_queue_threshold > 0 ? pipeline.chunk_queue_threshold : 1;
+	for (int i = 0; i < source_chunk_num; i++) {
+		auto source_chunk = make_uniq<DataChunk>();
+		source_chunk->Initialize(Allocator::Get(context.client), pipeline.source->GetTypes());
+		source_chunk->disable_columns = pipeline.source->disable_columns;
 
+		source_chunks.push_back(std::move(source_chunk));
+	}
 	InitializeChunk(final_chunk);
 	if (pipeline.materialize_strategy_mode > 0) {
 		for (int i = 0; i < pipeline.chunk_queue_threshold; i++) {
@@ -303,14 +310,6 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 			chunk_new->disable_columns = final_chunk.disable_columns;
 			chunk_queue_ptr.push_back(std::move(chunk_new));
 		}
-	}
-	int source_chunk_num = pipeline.chunk_queue_threshold > 0 ? pipeline.chunk_queue_threshold : 1;
-	for (int i = 0; i < source_chunk_num; i++) {
-		auto source_chunk = make_uniq<DataChunk>();
-		source_chunk->Initialize(Allocator::Get(context.client), pipeline.source->GetTypes());
-		source_chunk->disable_columns = pipeline.source->disable_columns;
-
-		source_chunks.push_back(std::move(source_chunk));
 	}
 }
 
@@ -666,7 +665,7 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 		OperatorResultType result;
 		// Note: if input is the final_chunk, we don't do any executing, the chunk just needs to be sinked
 		auto &final_chunk_real = final_chunks.size() > 0 ? *final_chunks[chunk_counter] : final_chunk;
-		if (&input != &final_chunk_real) {
+		if (&input != &final_chunk_real && !pipeline.operators.empty()) {
 			final_chunk_real.Reset();
 			result = Execute(input, final_chunk_real, initial_idx);
 			if (result == OperatorResultType::FINISHED) {
@@ -675,7 +674,7 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 		} else {
 			result = OperatorResultType::NEED_MORE_INPUT;
 		}
-		auto &sink_chunk = final_chunk_real;
+		auto &sink_chunk = pipeline.operators.empty() ? input : final_chunk_real;
 		if (sink_chunk.size() > 0) {
 			StartOperator(*pipeline.sink);
 			D_ASSERT(pipeline.sink);
@@ -918,7 +917,7 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 	if (dump_statistic) {
 		if (pipeline.sink->type == PhysicalOperatorType::HASH_JOIN) {
 			std::ofstream out(
-			    "/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/payload_hash_table_build_time.txt",
+			    "/home/yihao/duckdb/ht_tmp/duckdb/examples/embedded-c++/release/payload_hash_table_build_time.txt",
 			    std::ios::app);
 			out << pipeline.operator_total_time[pipeline.operator_total_time.size() - 1] << std::endl;
 		}
@@ -940,7 +939,7 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 				std::cout << "Map building time: " << pipeline.map_building_time << std::endl;
 				if (dump_statistic) {
 					std::ofstream out(
-					    "/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/payload_build_time.txt",
+					    "/home/yihao/duckdb/ht_tmp/duckdb/examples/embedded-c++/release/payload_build_time.txt",
 					    std::ios::app);
 					int materialize_times = (total_materialized_chunks / pipeline.chunk_queue_threshold);
 					if (total_materialized_chunks % pipeline.chunk_queue_threshold != 0) {
