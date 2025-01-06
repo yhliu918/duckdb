@@ -174,7 +174,7 @@ find_materialize_position(std::vector<std::string> attribute, std::unordered_map
 void write_materialize_config(std::unordered_map<int, std::vector<std::string>> &materialize_config,
                               std::unordered_map<int, bool> &push_source,
                               unordered_map<std::string, int> &from_pipeline, std::vector<std::string> attribute,
-                              int materialize_strategy_mode = 1, int queue_threshold = 100) {
+                              int materialize_strategy_mode = 1, int queue_threshold = 100, int op_idx = 0) {
 	for (json::iterator it = schema.begin(); it != schema.end(); ++it) {
 		std::ofstream file(path_str + "config/table" + it.key(), std::ios::out);
 		for (json::iterator it2 = it.value().begin(); it2 != it.value().end(); ++it2) {
@@ -195,7 +195,7 @@ void write_materialize_config(std::unordered_map<int, std::vector<std::string>> 
 	for (auto &[pos, attrs] : materialize_config) {
 		auto pipeline_ops = plan[std::to_string(pos)]["operators"];
 		assert(pipeline_ops.size() >= 2);
-		int mat_op_index = pipeline_ops[pipeline_ops.size() - 2]["op_index"];
+		int mat_op_index = (op_idx == 0) ? int(pipeline_ops[pipeline_ops.size() - 2]["op_index"]) : op_idx;
 		unordered_map<int, std::vector<std::string>> from_pipeline_to_attr;
 		std::ofstream file(path_str + "config/op_mat_" + std::to_string(mat_op_index), std::ios::out);
 		for (auto &attr : attrs) {
@@ -228,7 +228,11 @@ void write_materialize_config(std::unordered_map<int, std::vector<std::string>> 
 			//! fix me: keep_rowid is 1 for now
 			std::string table_name = plan[std::to_string(pipeline)]["table"];
 			pipeline_file << pipeline << " 1 " << attrs.size() << " rowid(" << table_name << ") "
-			              << schema[table_name]["table_size"] << std::endl;
+			              << schema[table_name]["table_size"];
+			if (op_idx != 0) {
+				pipeline_file << " " << op_idx;
+			}
+			pipeline_file << std::endl;
 			for (auto &attr : attrs) {
 				int colid_in_basetable = schema[table_name][attr]["col_id"];
 				int attri_type = schema[table_name][attr]["type"];
@@ -314,6 +318,11 @@ int main(int argc, char *argv[]) {
 	int materialize_queue_thr = 100;
 	if (argc > 10) {
 		materialize_queue_thr = std::stoi(argv[10]);
+	}
+
+	int op_idx = 0;
+	if (argc > 11) {
+		op_idx = std::stoi(argv[11]);
 	}
 
 	// std::cout << "Warning: will remove all content files in the config directory first" << std::endl;
@@ -446,7 +455,7 @@ int main(int argc, char *argv[]) {
 		int cmd_result = system(command.c_str());
 	}
 	write_materialize_config(materialize_pos, push_source, from_pipeline, materialize_keys, mat_strategy,
-	                         materialize_queue_thr);
+	                         materialize_queue_thr, op_idx);
 
 	if (compressed_storage) {
 		double start = getNow();

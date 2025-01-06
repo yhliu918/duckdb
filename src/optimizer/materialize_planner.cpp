@@ -12,7 +12,7 @@ MaterializePlanner::MaterializePlanner(Optimizer &optimizer) : optimizer(optimiz
 }
 void MaterializePlanner::AddMaterialize(LogicalComparisonJoin &join) {
 	// read a file, which indicates the materialized entry in this join
-	std::ifstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/config/join" +
+	std::ifstream file("/home/yihao/duckdb/ht_tmp/duckdb/examples/embedded-c++/release/config/join" +
 	                       std::to_string(join_index++),
 	                   std::ios::in);
 	if (file.is_open()) {

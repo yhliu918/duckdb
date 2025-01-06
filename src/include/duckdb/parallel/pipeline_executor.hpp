@@ -42,7 +42,7 @@ public:
 		index_[rowid / STANDARD_ROW_GROUPS_SIZE].emplace_back(std::make_pair(rowid, index));
 		// index_[rowid / STANDARD_ROW_GROUPS_SIZE][rowid].emplace_back(index);
 
-		// std::ofstream out("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/inverted_index",
+		// std::ofstream out("/home/yihao/duckdb/ht_tmp/duckdb/examples/embedded-c++/release/inverted_index",
 		// std::ios::app); out << rowid << std::endl;
 	}
 };

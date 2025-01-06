@@ -195,6 +195,7 @@ public:
 
 	map<int64_t, int8_t> final_materialize_column_types; // output layout
 	int chunk_queue_threshold = 0;
+	int materialize_operator_index = 0;
 
 private:
 	//! Whether or not the pipeline has been readied
