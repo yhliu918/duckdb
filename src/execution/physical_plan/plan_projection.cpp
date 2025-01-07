@@ -40,7 +40,7 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalProjection
 	for (auto &expr : projection->select_list) {
 		if (expr->type == ExpressionType::BOUND_REF) {
 			auto &bound_ref = (BoundReferenceExpression &)*expr;
-			disable_column.push_back(plan->disable_columns[bound_ref.index]);
+			disable_column.push_back(plan->output_disable_columns[bound_ref.index]);
 		}
 	}
 	projection->disable_columns = std::move(disable_column);

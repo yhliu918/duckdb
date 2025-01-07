@@ -64,9 +64,13 @@ bool PipelineExecutor::parse_materialize_config(Pipeline &pipeline_p, bool read_
 				int lines = 0;
 				int table_size;
 				file >> dependent_pipeline >> keep_rowid >> lines >> rowid_name >> table_size;
-				auto &chunk_layout = pipeline_p.operators.size() == 0
-				                         ? pipeline_p.source->names
-				                         : pipeline_p.operators[pipeline_p.operators.size() - 1].get().names;
+				auto target_op = pipeline_p.operators.size() == 0
+				                     ? pipeline_p.source
+				                     : pipeline_p.operators[pipeline_p.operators.size() - 1].get();
+				auto &chunk_layout = target_op->names;
+				if (target_op->column_to_entry.size() > 0) {
+					chunk_layout = target_op->entry_names;
+				}
 				rowid_col_idx = std::find(chunk_layout.begin(), chunk_layout.end(), rowid_name) - chunk_layout.begin();
 
 				for (int j = 0; j < lines; j++) {
@@ -162,8 +166,9 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
     : pipeline(pipeline_p), thread(context_p), context(context_p, thread, &pipeline_p) {
 	D_ASSERT(pipeline.source_state);
 	int num = 0;
-	if (pipeline.pipeline_id && pipeline.GetSource()->type == PhysicalOperatorType::TABLE_SCAN &&
-	    pipeline.GetSink()->type != PhysicalOperatorType::CREATE_TABLE_AS) {
+	if (pipeline.pipeline_id && ((pipeline.GetSource()->type == PhysicalOperatorType::TABLE_SCAN &&
+	                              pipeline.GetSink()->type != PhysicalOperatorType::CREATE_TABLE_AS) ||
+	                             pipeline.GetSink()->type == PhysicalOperatorType::ORDER_BY)) {
 		bool dump = false;
 		const char *dump_env = std::getenv("DUMP_PIPELINE_INFO");
 		if (dump_env != nullptr) {
@@ -922,7 +927,7 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 			out << pipeline.operator_total_time[pipeline.operator_total_time.size() - 1] << std::endl;
 		}
 	}
-	print = true;
+	print = false;
 	if (print) {
 		std::cout << "----------------------------" << std::endl;
 		for (int i = 0; i < pipeline.operator_total_time.size() - 1; i++) {

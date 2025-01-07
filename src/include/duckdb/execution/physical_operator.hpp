@@ -67,6 +67,8 @@ public:
 	std::vector<int> output_disable_columns;
 	int operator_index = 0;
 	std::vector<std::string> names;
+	std::vector<std::string> entry_names;
+	std::unordered_map<int, std::vector<int>> column_to_entry;
 	std::vector<std::string> must_enables_left;
 	std::vector<std::string> must_enables_right;
 

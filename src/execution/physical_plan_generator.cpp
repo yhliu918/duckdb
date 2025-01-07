@@ -263,8 +263,20 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalOperator &
 		std::string mat_name;
 		while (infile >> mat_name) {
 			int mat_col = std::find(plan->names.begin(), plan->names.end(), mat_name) - plan->names.begin();
+			bool found = false;
+			if (plan->column_to_entry.size() > 0) {
+				for (auto &[out, col_idx] : plan->column_to_entry) {
+					if (std::find(col_idx.begin(), col_idx.end(), mat_col) != col_idx.end()) {
+						plan->output_disable_columns[out] = 0;
+						found = true;
+					}
+				}
+				if (found) {
+					break;
+				}
+			}
 			if (plan->output_disable_columns[mat_col] == 0) {
-				std::cout << "Failed to disable column " << mat_name << std::endl;
+				std::cout << "Failed to enable column " << mat_name << std::endl;
 			}
 			assert(plan->output_disable_columns[mat_col] != 0);
 			plan->output_disable_columns[mat_col] = 0;
@@ -281,16 +293,20 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalOperator &
 		std::string mat_name;
 		while (disable_columns_file >> mat_name) {
 			int mat_col = std::find(plan->names.begin(), plan->names.end(), mat_name) - plan->names.begin();
+			if (plan->column_to_entry.size() > 0) {
+				mat_col =
+				    std::find(plan->entry_names.begin(), plan->entry_names.end(), mat_name) - plan->entry_names.begin();
+			}
 			if (plan->output_disable_columns[mat_col] != 0) {
-				std::cout << "Failed to enable column " << mat_name << std::endl;
+				std::cout << "Failed to disable column " << mat_name << std::endl;
 			}
 			assert(plan->output_disable_columns[mat_col] == 0);
 			plan->output_disable_columns[mat_col] = 1;
 		}
 	}
 
-	std::string op_str = PrintOperator(plan);
-	std::cout << op_str << std::endl;
+	// std::string op_str = PrintOperator(plan);
+	// std::cout << op_str << std::endl;
 	if (!plan) {
 		throw InternalException("Physical plan generator - no plan generated");
 	}
@@ -320,10 +336,25 @@ std::string PhysicalPlanGenerator::PrintOperator(const unique_ptr<PhysicalOperat
 	case PhysicalOperatorType::HASH_GROUP_BY: {
 		auto &aggregate = plan->Cast<PhysicalHashAggregate>();
 		int i = 0;
-		for (auto &type : plan->types) {
-			op_str += "(" + std::to_string(i) + ", " + type.ToString() + ", " +
-			          std::to_string(plan->disable_columns[i]) + " ," + plan->names[i] + ")\n";
-			i++;
+		if (plan->entry_names.size() > 0) {
+			for (auto &entry_name : plan->entry_names) {
+				op_str += "(" + std::to_string(i) + ", " + plan->types[i].ToString() + ", " +
+				          std::to_string(plan->disable_columns[i]) + " ," + entry_name;
+				if (plan->column_to_entry.find(i) != plan->column_to_entry.end()) {
+					for (auto &col_idx : plan->column_to_entry[i]) {
+						op_str += " " + plan->names[col_idx];
+					}
+				}
+				op_str += ")\n";
+
+				i++;
+			}
+		} else {
+			for (auto &type : plan->types) {
+				op_str += "(" + std::to_string(i) + ", " + type.ToString() + ", " +
+				          std::to_string(plan->disable_columns[i]) + " ," + plan->names[i] + ")\n";
+				i++;
+			}
 		}
 		break;
 	}
@@ -339,11 +370,27 @@ std::string PhysicalPlanGenerator::PrintOperator(const unique_ptr<PhysicalOperat
 	}
 	case PhysicalOperatorType::PROJECTION: {
 		int i = 0;
-		for (auto &type : plan->types) {
-			op_str += "(" + std::to_string(i) + ", " + type.ToString() + ", " +
-			          std::to_string(plan->disable_columns[i]) + " ," + plan->names[i] + ")\n";
-			i++;
+		if (plan->entry_names.size() > 0) {
+			for (auto &entry_name : plan->entry_names) {
+				op_str += "(" + std::to_string(i) + ", " + plan->types[i].ToString() + ", " +
+				          std::to_string(plan->disable_columns[i]) + " ," + entry_name;
+				if (plan->column_to_entry.find(i) != plan->column_to_entry.end()) {
+					for (auto &col_idx : plan->column_to_entry[i]) {
+						op_str += " " + plan->names[col_idx];
+					}
+				}
+				op_str += ")\n";
+
+				i++;
+			}
+		} else {
+			for (auto &type : plan->types) {
+				op_str += "(" + std::to_string(i) + ", " + type.ToString() + ", " +
+				          std::to_string(plan->disable_columns[i]) + " ," + plan->names[i] + ")\n";
+				i++;
+			}
 		}
+
 		break;
 	}
 	case PhysicalOperatorType::TABLE_SCAN: {
@@ -405,10 +452,16 @@ std::vector<std::string> PhysicalPlanGenerator::PrintOperatorCatalog(const uniqu
 	case PhysicalOperatorType::ORDER_BY: {
 		auto &order = plan->Cast<PhysicalOrder>();
 		std::vector<std::string> op_str_child = PrintOperatorCatalog(order.children[0]);
-		for (int i = 0; i < order.orders.size(); i++) {
-			auto &bound_ref = order.orders[i].expression->Cast<BoundReferenceExpression>();
-			op_str.push_back(op_str_child[bound_ref.index]);
+		if (order.children[0]->type == PhysicalOperatorType::HASH_GROUP_BY) {
+			auto &aggregate = order.children[0]->Cast<PhysicalHashAggregate>();
+			if (aggregate.column_to_entry.size() > 0) {
+				op_str_child = aggregate.entry_names;
+			}
 		}
+		// for (int i = 0; i < order.orders.size(); i++) {
+		// 	auto &bound_ref = order.orders[i].expression->Cast<BoundReferenceExpression>();
+		// 	op_str.push_back(op_str_child[bound_ref.index]);
+		// }
 		for (int i = 0; i < order.projections.size(); i++) {
 			op_str.push_back(op_str_child[order.projections[i]]);
 		}
@@ -417,6 +470,10 @@ std::vector<std::string> PhysicalPlanGenerator::PrintOperatorCatalog(const uniqu
 	case PhysicalOperatorType::HASH_GROUP_BY: {
 		auto &aggregate = plan->Cast<PhysicalHashAggregate>();
 		std::vector<std::string> op_str_child = PrintOperatorCatalog(aggregate.children[0]);
+		if (aggregate.column_to_entry.size() > 0) {
+			op_str = op_str_child;
+			break;
+		}
 		for (int i = 0; i < aggregate.grouped_aggregate_data.groups.size(); i++) {
 			auto &group = aggregate.grouped_aggregate_data.groups[i];
 			if (group->type == ExpressionType::BOUND_REF) {

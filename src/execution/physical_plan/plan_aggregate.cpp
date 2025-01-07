@@ -170,17 +170,25 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalAggregate 
 	plan->names = PrintOperatorCatalog(plan);
 	plan->operator_index = operator_idx;
 	auto &projection = plan->Cast<PhysicalProjection>();
+	int i = 0;
 	for (auto &expr : projection.select_list) {
 		if (expr->type == ExpressionType::BOUND_REF) {
 			auto &bound_ref = (BoundReferenceExpression &)*expr;
-			projection.disable_columns.push_back(projection.children[0]->disable_columns[bound_ref.index]);
+			projection.disable_columns.push_back(projection.children[0]->output_disable_columns[bound_ref.index]);
+			plan->entry_names.push_back(projection.names[i]);
+			i++;
 		} else if (expr->type == ExpressionType::BOUND_FUNCTION) {
 			auto &bound_ref = (BoundFunctionExpression &)*expr;
 			std::vector<int> op_str_func;
 			parse_bound_function(expr, op_str_func);
+			bool disable_column = 0;
 			for (auto &idx : op_str_func) {
-				projection.disable_columns.push_back(projection.children[0]->disable_columns[idx]);
+				disable_column |= (projection.children[0]->output_disable_columns[idx]);
+				plan->column_to_entry[plan->entry_names.size()].emplace_back(i);
+				i++;
 			}
+			projection.disable_columns.push_back(disable_column);
+			plan->entry_names.push_back("bound_function");
 		}
 	}
 	projection.output_disable_columns = projection.disable_columns;
@@ -218,8 +226,10 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalAggregate 
 			    std::move(op.grouping_functions), op.estimated_cardinality);
 		}
 	}
-	groupby->disable_columns = plan->disable_columns;
+	groupby->disable_columns = plan->output_disable_columns;
 	groupby->output_disable_columns = groupby->disable_columns;
+	groupby->entry_names = plan->entry_names;
+	groupby->column_to_entry = plan->column_to_entry;
 	groupby->children.push_back(std::move(plan));
 
 	return groupby;
