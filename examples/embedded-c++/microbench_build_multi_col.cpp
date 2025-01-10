@@ -74,14 +74,15 @@ int main(int argc, char *argv[]) {
 	std::string payload_file = "";
 	int mat_stat = atoi(argv[11]);
 	int queue_thr = atoi(argv[12]);
-	if (argc > 13) {
-		print_result = atoi(argv[13]);
-	}
+	int payload_column_num = atoi(argv[13]);
 	if (argc > 14) {
-		key_set_file = argv[14];
+		print_result = atoi(argv[14]);
 	}
 	if (argc > 15) {
-		payload_file = argv[15];
+		key_set_file = argv[15];
+	}
+	if (argc > 16) {
+		payload_file = argv[16];
 	}
 
 	std::string command = "rm /home/yihao/duckdb/ht_tmp/duckdb/examples/embedded-c++/release/config/*";
@@ -90,24 +91,26 @@ int main(int argc, char *argv[]) {
 	std::string file_path = "/home/yihao/duckdb/ht_tmp/duckdb/examples/embedded-c++/microbench/";
 	std::string build_file_name = "build_" + std::to_string(build_size) + "_" +
 	                              std::to_string(int(build_side_hit_ratio * 100)) + "_" + build_key_pattern + "_" +
-	                              std::to_string(payload_size);
+	                              std::to_string(payload_size) + "_" + std::to_string(payload_column_num);
 	std::string probe_file_name = "probe_" + std::to_string(build_size) + "_" + std::to_string(probe_size) + "_" +
 	                              std::to_string(int(selectivity * 10000)) + "_" + probe_key_pattern + "_" +
 	                              probe_distribution + "_" + std::to_string(int(build_side_hit_ratio * 100));
 	std::cout << build_file_name << " " << probe_file_name << std::endl;
 	std::vector<int> types;
 	int string_length = 0;
-	if (payload_size == 4) {
-		types.push_back(13);
-	} else if (payload_size == 8) {
-		types.push_back(14);
-	} else {
-		types.push_back(25);
-		if (payload_size % 10 == 0) {
-			string_length = payload_size;
+	for (int i = 0; i < payload_column_num; i++) {
+
+		if (payload_size == 4) {
+			types.push_back(13);
+		} else if (payload_size == 8) {
+			types.push_back(14);
+		} else {
+			types.push_back(25);
+			if (payload_size % 10 == 0) {
+				string_length = payload_size;
+			}
 		}
 	}
-	int payload_column_num = 1;
 
 	if (mode == 0) // load from parquet
 	{
@@ -139,9 +142,16 @@ int main(int argc, char *argv[]) {
 		std::cout << mode << " " << thread << " " << probe_size << " " << build_size << " " << selectivity << " "
 		          << payload_size << " " << probe_distribution << " " << build_side_hit_ratio << " "
 		          << build_key_pattern << " " << probe_key_pattern << " " << end - start << std::endl;
+		std::ofstream out(
+		    "/home/yihao/duckdb/ht_tmp/duckdb/examples/embedded-c++/release/benchmark_multicol_dropcache.txt",
+		    std::ios::app);
+		out << mode << " " << thread << " " << probe_size << " " << build_size << " " << selectivity << " "
+		    << payload_size << " " << probe_distribution << " " << build_side_hit_ratio << " " << build_key_pattern
+		    << " " << probe_key_pattern << " " << mat_stat << " " << queue_thr << " " << payload_column_num << " "
+		    << end - start << std::endl;
 	} else if (mode == 1) // load from uncompressed duckdb storage
 	{
-		DuckDB db("/home/yihao/duckdb/origin/duckdb/examples/embedded-c++/release/micro_uncom_test.db");
+		DuckDB db("/home/yihao/duckdb/origin/duckdb/examples/embedded-c++/release/micro_multi_uncom.db");
 		Connection con(db);
 		con.Query("SET threads TO " + thread + ";");
 		con.Query("SET disabled_optimizers = 'join_order,build_side_probe_side,COMPRESSED_MATERIALIZATION';");
@@ -174,12 +184,19 @@ int main(int argc, char *argv[]) {
 		std::cout << mode << " " << thread << " " << probe_size << " " << build_size << " " << selectivity << " "
 		          << payload_size << " " << probe_distribution << " " << build_side_hit_ratio << " "
 		          << build_key_pattern << " " << probe_key_pattern << " " << end - start << std::endl;
-		// std::ofstream out("/home/yihao/duckdb/ht_tmp/duckdb/examples/embedded-c++/release/payload_build_time.txt",
+		// std::ofstream out("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/payload_build_time.txt",
 		//                   std::ios::app);
 		// out << mat_stat << " " << queue_thr << " " << end - start << std::endl;
+		std::ofstream out(
+		    "/home/yihao/duckdb/ht_tmp/duckdb/examples/embedded-c++/release/benchmark_multicol_dropcache.txt",
+		    std::ios::app);
+		out << mode << " " << thread << " " << probe_size << " " << build_size << " " << selectivity << " "
+		    << payload_size << " " << probe_distribution << " " << build_side_hit_ratio << " " << build_key_pattern
+		    << " " << probe_key_pattern << " " << mat_stat << " " << queue_thr << " " << payload_column_num << " "
+		    << end - start << std::endl;
 	} else // load from compressed duckdb storage
 	{
-		DuckDB db("/home/yihao/duckdb/origin/duckdb/examples/embedded-c++/release/micro_test.db");
+		DuckDB db("/home/yihao/duckdb/origin/duckdb/examples/embedded-c++/release/micro_multi.db");
 		Connection con(db);
 		con.Query("SET threads TO " + thread + ";");
 		con.Query("SET disabled_optimizers = 'join_order,build_side_probe_side,COMPRESSED_MATERIALIZATION';");
@@ -213,5 +230,12 @@ int main(int argc, char *argv[]) {
 		std::cout << mode << " " << thread << " " << probe_size << " " << build_size << " " << selectivity << " "
 		          << payload_size << " " << probe_distribution << " " << build_side_hit_ratio << " "
 		          << build_key_pattern << " " << probe_key_pattern << " " << end - start << std::endl;
+		std::ofstream out(
+		    "/home/yihao/duckdb/ht_tmp/duckdb/examples/embedded-c++/release/benchmark_multicol_dropcache.txt",
+		    std::ios::app);
+		out << mode << " " << thread << " " << probe_size << " " << build_size << " " << selectivity << " "
+		    << payload_size << " " << probe_distribution << " " << build_side_hit_ratio << " " << build_key_pattern
+		    << " " << probe_key_pattern << " " << mat_stat << " " << queue_thr << " " << payload_column_num << " "
+		    << end - start << std::endl;
 	}
 }

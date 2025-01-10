@@ -63,13 +63,13 @@ bool PipelineExecutor::parse_materialize_config(Pipeline &pipeline_p, bool read_
 				int string_length = 0;
 				int lines = 0;
 				int table_size;
-				int operator_index = 0;
-				file >> dependent_pipeline >> keep_rowid >> lines >> rowid_name >> table_size >> operator_index;
-				auto &chunk_layout = pipeline_p.operators.size() == 0
-				                         ? pipeline_p.source->names
-				                         : pipeline_p.operators[pipeline_p.operators.size() - 1].get().names;
-				if (operator_index != 0) {
-					chunk_layout = pipeline_p.operators[operator_index - 1].get().names;
+				file >> dependent_pipeline >> keep_rowid >> lines >> rowid_name >> table_size;
+				auto target_op = pipeline_p.operators.size() == 0
+				                     ? pipeline_p.source
+				                     : pipeline_p.operators[pipeline_p.operators.size() - 1].get();
+				auto &chunk_layout = target_op->names;
+				if (target_op->column_to_entry.size() > 0) {
+					chunk_layout = target_op->entry_names;
 				}
 				rowid_col_idx = std::find(chunk_layout.begin(), chunk_layout.end(), rowid_name) - chunk_layout.begin();
 
@@ -87,9 +87,6 @@ bool PipelineExecutor::parse_materialize_config(Pipeline &pipeline_p, bool read_
 				if (!col_map.empty()) {
 					pipeline_p.SetMaterializeMap(materialize_strategy_mode, rowid_col_idx, dependent_pipeline,
 					                             keep_rowid, col_map, col_types, fixed_len_strings_columns, table_size);
-				}
-				if (operator_index != 0) {
-					pipeline_p.materialize_operator_index = operator_index;
 				}
 			}
 		}
@@ -169,9 +166,9 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
     : pipeline(pipeline_p), thread(context_p), context(context_p, thread, &pipeline_p) {
 	D_ASSERT(pipeline.source_state);
 	int num = 0;
-	if ((pipeline.pipeline_id && pipeline.GetSource()->type == PhysicalOperatorType::TABLE_SCAN &&
-	     pipeline.GetSink()->type != PhysicalOperatorType::CREATE_TABLE_AS) ||
-	    (pipeline.pipeline_id && pipeline.GetSink()->type == PhysicalOperatorType::ORDER_BY)) {
+	if (pipeline.pipeline_id && ((pipeline.GetSource()->type == PhysicalOperatorType::TABLE_SCAN &&
+	                              pipeline.GetSink()->type != PhysicalOperatorType::CREATE_TABLE_AS) ||
+	                             pipeline.GetSink()->type == PhysicalOperatorType::ORDER_BY)) {
 		bool dump = false;
 		const char *dump_env = std::getenv("DUMP_PIPELINE_INFO");
 		if (dump_env != nullptr) {
@@ -183,7 +180,7 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 			dump_pipeline_info(pipeline);
 		}
 
-		std::cout << pipeline.pipeline_id << " " << pipeline.parent << " " << pipeline.ToString() << std::endl;
+		// std::cout << pipeline.pipeline_id << " " << pipeline.parent << " " << pipeline.ToString() << std::endl;
 	}
 	bool mat_mode = parse_materialize_config(pipeline, false);
 	if (pipeline.sink) {
@@ -930,7 +927,7 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 			out << pipeline.operator_total_time[pipeline.operator_total_time.size() - 1] << std::endl;
 		}
 	}
-	print = true;
+	print = false;
 	if (print) {
 		std::cout << "----------------------------" << std::endl;
 		for (int i = 0; i < pipeline.operator_total_time.size() - 1; i++) {
@@ -1031,10 +1028,6 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 			pipeline.incrementOperatorTime(op_end - op_start, operator_idx);
 
 			//! if materialize here, we push the chunk into the chunk queue
-			if (pipeline.materialize_flag && current_operator.operator_index == pipeline.materialize_operator_index &&
-			    pipeline.materialize_strategy_mode == 0) {
-				InplaceMaterializeChunk(current_chunk);
-			}
 			EndOperator(current_operator, &current_chunk);
 			if (op_result == OperatorResultType::HAVE_MORE_OUTPUT) {
 				// more data remains in this operator

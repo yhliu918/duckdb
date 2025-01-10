@@ -126,7 +126,7 @@ bool Pipeline::ScheduleParallel(shared_ptr<Event> &event) {
 	if (max_threads > active_threads) {
 		max_threads = active_threads;
 	}
-	std::ofstream out("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/release/pipeline_dop" +
+	std::ofstream out("/home/yihao/duckdb/ht_tmp/duckdb/examples/embedded-c++/release/pipeline_dop" +
 	                      std::to_string(this->pipeline_id),
 	                  std::ios::out);
 	out << max_threads << std::endl;

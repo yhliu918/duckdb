@@ -266,8 +266,9 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalGet &op) {
 					}
 				}
 			}
-			unique_ptr<TableFilterSet> table_filters_new = make_uniq<TableFilterSet>();
+			unique_ptr<TableFilterSet> table_filters_new;
 			if (!op.table_filters.filters.empty()) {
+				table_filters_new = make_uniq<TableFilterSet>();
 				for (auto &[idx, filter] : table_filters->filters) {
 					int column_idx_new = std::find(column_ids_new.begin(), column_ids_new.end(), column_ids[idx]) -
 					                     column_ids_new.begin();
