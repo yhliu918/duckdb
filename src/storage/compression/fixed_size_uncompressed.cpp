@@ -172,12 +172,12 @@ void FixedSizeScan(ColumnSegment &segment, ColumnScanState &state, idx_t scan_co
 template <class T>
 void FixedSizeFetchRow(ColumnSegment &segment, ColumnFetchState &state, row_t row_id, Vector &result,
                        idx_t result_idx) {
-	// auto &buffer_manager = BufferManager::GetBufferManager(segment.db);
-	// auto handle = buffer_manager.Pin(segment.block);
+	auto &buffer_manager = BufferManager::GetBufferManager(segment.db);
+	auto handle = buffer_manager.Pin(segment.block);
 
 	// first fetch the data from the base table
-	// auto data_ptr = handle.Ptr() + segment.GetBlockOffset() + NumericCast<idx_t>(row_id) * sizeof(T);
-	auto data_ptr = segment.block->buffer->buffer + segment.GetBlockOffset() + (row_id) * sizeof(T);
+	auto data_ptr = handle.Ptr() + segment.GetBlockOffset() + NumericCast<idx_t>(row_id) * sizeof(T);
+	// auto data_ptr = segment.block->buffer->buffer + segment.GetBlockOffset() + (row_id) * sizeof(T);
 	// int32_t value;
 	// memcpy(&value, data_ptr, sizeof(int32_t));
 	// std::cout << " " << value << std::endl;
