@@ -254,7 +254,7 @@ void write_materialize_config(std::unordered_map<int, std::vector<std::string>> 
 	}
 }
 int main(int argc, char *argv[]) {
-	std::cout << current_path_str << std::endl;
+	// std::cout << current_path_str << std::endl;
 	std::string thread = argv[1];
 	bool print_result = false;
 	std::ofstream file(current_path_str + "config_num");
@@ -359,8 +359,8 @@ int main(int argc, char *argv[]) {
 				result->Print();
 			}
 			result->PrintRowNumber();
-			std::cout << "early materialize: 0 ";
-			std::cout << thread << " " << end - start << std::endl;
+			std::cout << "early 0 ";
+			std::cout << thread << " 0 " << end - start << std::endl;
 		}
 	} else {
 		if (dump) {
@@ -372,8 +372,8 @@ int main(int argc, char *argv[]) {
 				result->Print();
 			}
 			result->PrintRowNumber();
-			std::cout << "early materialize: 0 ";
-			std::cout << thread << " " << end - start << std::endl;
+			std::cout << "early 0 ";
+			std::cout << thread << " 0 " << end - start << std::endl;
 		}
 	}
 	auto all_attributes = parse_plan();
@@ -458,7 +458,7 @@ int main(int argc, char *argv[]) {
 		}
 		result->PrintRowNumber();
 		std::cout << attribute << " " << materialize_pipeline_id << " ";
-		std::cout << thread << " " << end - start << std::endl;
+		std::cout << thread << " " << materialize_queue_thr << " " << end - start << std::endl;
 	} else {
 		double start = getNow();
 		auto result = con.Query(query);
@@ -468,7 +468,7 @@ int main(int argc, char *argv[]) {
 		}
 		result->PrintRowNumber();
 		std::cout << attribute << " " << materialize_pipeline_id << " ";
-		std::cout << thread << " " << end - start << std::endl;
+		std::cout << thread << " " << materialize_queue_thr << " " << end - start << std::endl;
 	}
 	exit(0);
 }
