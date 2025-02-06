@@ -542,6 +542,17 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 					i--;
 					continue;
 				}
+				if (idx == result.row_id_column) {
+					// std::cout << "row_id_column" << std::endl;
+					if (result.data[idx].GetType().InternalType() == PhysicalType::INT64) {
+						result.data[idx].Sequence(UnsafeNumericCast<int64_t>(this->start + current_row), 1, count);
+					} else if (result.data[idx].GetType().InternalType() == PhysicalType::INT32) {
+						// std::cout << "row_id_column" << std::endl;
+						result.data[idx].Sequence(UnsafeNumericCast<int32_t>(this->start + current_row), 1, count);
+					}
+					idx++;
+					continue;
+				}
 				if (column == COLUMN_IDENTIFIER_ROW_ID) {
 					// scan row id
 					D_ASSERT(result.data[idx].GetType().InternalType() == ROW_TYPE);
@@ -585,9 +596,9 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 					int output_idx =
 					    std::find(column_ids_total.begin(), column_ids_total.end(), filter.table_column_index) -
 					    column_ids_total.begin();
-					if (result.data.size() < column_ids_total.size()) {
-						output_idx = scan_idx;
-					}
+					// if (result.data.size() < column_ids_total.size()) {
+					// 	output_idx = scan_idx;
+					// }
 					// output_idx = scan_idx;
 					auto &col_data = GetColumn(filter.table_column_index);
 					col_data.Select(transaction, state.vector_index, state.column_scans[scan_idx],
@@ -600,9 +611,9 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 					int output_idx =
 					    std::find(column_ids_total.begin(), column_ids_total.end(), table_filter.table_column_index) -
 					    column_ids_total.begin();
-					if (result.data.size() < column_ids_total.size()) {
-						output_idx = table_filter.scan_column_index;
-					}
+					// if (result.data.size() < column_ids_total.size()) {
+					// 	output_idx = table_filter.scan_column_index;
+					// }
 					// output_idx = table_filter.scan_column_index;
 					result.data[output_idx].Slice(sel, approved_tuple_count);
 				}
@@ -640,14 +651,26 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 					continue;
 				}
 				auto column = column_ids[i];
-				if (column == COLUMN_IDENTIFIER_ROW_ID) {
-					D_ASSERT(result.data[idx].GetType().InternalType() == PhysicalType::INT64);
-					result.data[idx].SetVectorType(VectorType::FLAT_VECTOR);
-					auto result_data = FlatVector::GetData<int64_t>(result.data[idx]);
-					for (size_t sel_idx = 0; sel_idx < approved_tuple_count; sel_idx++) {
-						result_data[sel_idx] =
-						    UnsafeNumericCast<int64_t>(this->start + current_row + sel.get_index(sel_idx));
+				if (idx == result.row_id_column) {
+					// if (column == COLUMN_IDENTIFIER_ROW_ID) {
+					// std::cout << "row_id_column" << std::endl;
+					if (result.data[idx].GetType().InternalType() == PhysicalType::INT64) {
+						result.data[idx].SetVectorType(VectorType::FLAT_VECTOR);
+						auto result_data = FlatVector::GetData<int64_t>(result.data[idx]);
+						for (size_t sel_idx = 0; sel_idx < approved_tuple_count; sel_idx++) {
+							result_data[sel_idx] =
+							    UnsafeNumericCast<int64_t>(this->start + current_row + sel.get_index(sel_idx));
+						}
+					} else if (result.data[idx].GetType().InternalType() == PhysicalType::INT32) {
+						// std::cout << "row_id_column" << std::endl;
+						result.data[idx].SetVectorType(VectorType::FLAT_VECTOR);
+						auto result_data = FlatVector::GetData<int32_t>(result.data[idx]);
+						for (size_t sel_idx = 0; sel_idx < approved_tuple_count; sel_idx++) {
+							result_data[sel_idx] =
+							    UnsafeNumericCast<int32_t>(this->start + current_row + sel.get_index(sel_idx));
+						}
 					}
+
 				} else {
 					auto &col_data = GetColumn(column);
 					if (TYPE == TableScanType::TABLE_SCAN_REGULAR) {
@@ -700,6 +723,7 @@ void RowGroup::GetScalar(TransactionData transaction, CollectionScanState &state
 	cfs.decompressed_vector.resize(50);
 	auto &column_data = GetColumn(project_column_id);
 	bool use_full_decompress = inverted_index.size() > (150 * column_data.GetColumnSegmentCount());
+	// use_full_decompress = false;
 	for (auto &[rowid, result_rowid] : inverted_index) {
 		column_data.FetchRowNew(transaction, cfs, rowid, result, result_rowid, fixed_string_len, use_full_decompress);
 	}

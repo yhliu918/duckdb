@@ -9,13 +9,13 @@
 #pragma once
 
 #include "duckdb/common/common.hpp"
-#include "duckdb/storage/block_manager.hpp"
-#include "duckdb/storage/block.hpp"
 #include "duckdb/common/file_system.hpp"
-#include "duckdb/common/unordered_set.hpp"
 #include "duckdb/common/set.hpp"
+#include "duckdb/common/unordered_set.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/main/config.hpp"
+#include "duckdb/storage/block.hpp"
+#include "duckdb/storage/block_manager.hpp"
 
 namespace duckdb {
 

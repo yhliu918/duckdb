@@ -186,6 +186,8 @@ public:
 	vector<double> operator_total_time;
 	double mat_operator_time = 0;
 	double map_building_time = 0;
+	double io_time = 0;
+	double materialize_io_time = 0;
 	double total_time = 0;
 	int pipeline_id = 0;
 	int parent = 0;

@@ -49,6 +49,7 @@ public:
 	//! The vectors owned by the DataChunk.
 	vector<Vector> data;
 	std::vector<int> disable_columns;
+	int row_id_column = -1;
 
 public:
 	inline idx_t size() const { // NOLINT

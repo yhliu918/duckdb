@@ -379,6 +379,54 @@ void RLEScan(ColumnSegment &segment, ColumnScanState &state, idx_t scan_count, V
 //===--------------------------------------------------------------------===//
 template <class T>
 void RLEFetchRow(ColumnSegment &segment, ColumnFetchState &state, row_t row_id, Vector &result, idx_t result_idx) {
+	if (state.full_decompression) {
+		if (!state.decompressed_vector[state.vector_index]) {
+			int scan_count = segment.count.load();
+			state.decompressed_vector[state.vector_index] =
+			    make_uniq<Vector>(result.GetType(), true, false, scan_count);
+			RLEScanState<T> scan_state(segment);
+			idx_t result_offset = 0;
+			auto data = scan_state.handle.Ptr() + segment.GetBlockOffset();
+			auto data_pointer = reinterpret_cast<T *>(data + RLEConstants::RLE_HEADER_SIZE);
+			auto index_pointer = reinterpret_cast<rle_count_t *>(data + scan_state.rle_count_offset);
+
+			// If we are scanning an entire Vector and it contains only a single run
+			if (CanEmitConstantVector<false>(scan_state.position_in_entry, index_pointer[scan_state.entry_pos],
+			                                 scan_count)) {
+				RLEScanConstant<T>(scan_state, index_pointer, data_pointer, scan_count, result);
+				return;
+			}
+
+			auto result_data = FlatVector::GetData<T>(*state.decompressed_vector[state.vector_index]);
+			for (idx_t i = 0; i < scan_count; i++) {
+				// assign the current value
+				result_data[result_offset + i] = data_pointer[scan_state.entry_pos];
+				scan_state.position_in_entry++;
+				if (ExhaustedRun(scan_state, index_pointer)) {
+					ForwardToNextRun(scan_state);
+				}
+			}
+			state.decompressed_vector[state.vector_index]->SetVectorType(VectorType::FLAT_VECTOR);
+		}
+		if (state.decompressed_vector[state.vector_index]) {
+			auto result_data = FlatVector::GetData<T>(result);
+			auto decompressed_data = FlatVector::GetData<T>(*state.decompressed_vector[state.vector_index]);
+			if (state.row_index) {
+				for (auto index : *state.row_index) {
+					// std::cout << index << " " << segment.start << " ";
+					// std::cout << index << std::endl;
+					result_data[index] = decompressed_data[row_id];
+				}
+			} else {
+				// std::cout << result_idx << " " << segment.start << " ";
+				// std::cout << result_idx << std::endl;
+				result_data[result_idx] = decompressed_data[row_id];
+				// std::cout << result_idx << " " << std::endl;
+			}
+		}
+		return;
+	}
+
 	RLEScanState<T> scan_state(segment);
 	scan_state.Skip(segment, NumericCast<idx_t>(row_id));
 
