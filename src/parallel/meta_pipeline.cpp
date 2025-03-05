@@ -170,7 +170,6 @@ void MetaPipeline::AddRecursiveDependencies(const vector<shared_ptr<Pipeline>> &
 	if (recursive_cte) {
 		return; // let's not burn our fingers on this for now
 	}
-	return;
 
 	vector<shared_ptr<MetaPipeline>> child_meta_pipelines;
 	this->GetMetaPipelines(child_meta_pipelines, true, false);

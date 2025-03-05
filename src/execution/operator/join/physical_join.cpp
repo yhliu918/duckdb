@@ -65,8 +65,7 @@ void PhysicalJoin::BuildJoinPipelines(Pipeline &current, MetaPipeline &meta_pipe
 		}
 
 		if (numa_tag) {
-			auto numa_id = current_build_id.fetch_add(1);
-			current.numa_id = numa_id;
+			auto numa_id = current.numa_id;
 			vector<shared_ptr<Pipeline>> child_pipelines;
 			child_meta_pipeline.GetPipelines(child_pipelines, true);
 			for (auto &pipeline : child_pipelines) {
@@ -82,15 +81,14 @@ void PhysicalJoin::BuildJoinPipelines(Pipeline &current, MetaPipeline &meta_pipe
 		}
 	}
 
-	if (debug_tag && split_probe_rest != 0) {
+	if (--split_probe_rest == 0) {
 		auto breaker_types = op.children[0]->types;
 		auto breaker_estimated_cardinality = op.children[0]->estimated_cardinality;
 		auto breaker = make_uniq<PhysicalPipelineBreaker>(breaker_types, std::move(op.children[0]), breaker_estimated_cardinality);
 		op.children[0] = std::move(breaker);
-		split_probe_rest--;
 	}
 
-	if (debug_tag && split_probe_tag) {
+	if (split_probe_tag && numa_tag) {
 		current.half_thread_tag = true;
 	}
 
@@ -98,8 +96,10 @@ void PhysicalJoin::BuildJoinPipelines(Pipeline &current, MetaPipeline &meta_pipe
 	op.children[0]->BuildPipelines(current, meta_pipeline);
 
 	if (last_child_ptr) {
-		// the pointer was set, set up the dependencies
-		meta_pipeline.AddRecursiveDependencies(dependencies, *last_child_ptr);
+		if (!parallel_build_tag) {
+			// the pointer was set, set up the dependencies
+			meta_pipeline.AddRecursiveDependencies(dependencies, *last_child_ptr);
+		}
 	}
 
 	switch (op.type) {

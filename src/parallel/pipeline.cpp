@@ -13,7 +13,6 @@
 #include "duckdb/parallel/pipeline_executor.hpp"
 #include "duckdb/parallel/task_scheduler.hpp"
 
-extern int debug_tag;
 extern int numa_tag;
 namespace duckdb {
 
@@ -125,7 +124,6 @@ bool Pipeline::ScheduleParallel(shared_ptr<Event> &event) {
 	if (max_threads > active_threads) {
 		max_threads = active_threads;
 	}
-	std::cerr << std::to_string(max_threads) + " " + std::to_string(half_thread_tag) + "\n";
 	if (half_thread_tag) {
 		max_threads = (max_threads + 1) / 2;
 		if (max_threads >= 48) {

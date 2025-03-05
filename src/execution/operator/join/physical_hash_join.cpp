@@ -426,11 +426,6 @@ public:
 		}
 	}
 
-	void FinishEvent() override {
-		sink.hash_table->GetDataCollection().VerifyEverythingPinned();
-		sink.hash_table->finalized = true;
-	}
-
 	static constexpr const idx_t PARALLEL_CONSTRUCT_THRESHOLD = 1048576;
 };
 

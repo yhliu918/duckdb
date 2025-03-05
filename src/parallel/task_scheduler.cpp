@@ -23,7 +23,6 @@
 #include <unistd.h>
 #endif
 
-extern int debug_tag;
 extern int numa_tag;
 
 namespace duckdb {

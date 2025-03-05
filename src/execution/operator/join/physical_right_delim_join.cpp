@@ -1,5 +1,6 @@
 #include "duckdb/execution/operator/join/physical_right_delim_join.hpp"
 
+#include "duckdb/execution/operator/helper/physical_pipeline_breaker.hpp"
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 #include "duckdb/execution/operator/aggregate/physical_hash_aggregate.hpp"
 #include "duckdb/execution/operator/join/physical_join.hpp"
@@ -7,6 +8,12 @@
 #include "duckdb/parallel/meta_pipeline.hpp"
 #include "duckdb/parallel/pipeline.hpp"
 #include "duckdb/parallel/thread_context.hpp"
+
+extern int parallel_build_tag;
+extern int split_probe_tag;
+extern int split_probe_rest;
+extern int debug_tag;
+extern int numa_tag;
 
 namespace duckdb {
 

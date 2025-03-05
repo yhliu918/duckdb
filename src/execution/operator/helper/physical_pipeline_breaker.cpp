@@ -7,7 +7,7 @@
 #include "duckdb/common/types/column/column_data_collection.hpp"
 #include "duckdb/common/types/column/column_data_collection_segment.hpp"
 
-extern int debug_tag;
+extern int numa_tag;
 
 namespace duckdb {
 
@@ -171,8 +171,13 @@ void PhysicalPipelineBreaker::BuildPipelines(Pipeline &current, MetaPipeline &me
 	state.SetPipelineSource(current, *this);
 
 	// we create a new pipeline starting from the child
-	auto &child_meta_pipeline = meta_pipeline.CreateChildMetaPipelineWithoutDependency(current, *this);
-	// auto &child_meta_pipeline = meta_pipeline.CreateChildMetaPipeline(current, *this);
-	child_meta_pipeline.Build(*children[0]);
+	if (numa_tag) {
+		auto &child_meta_pipeline = meta_pipeline.CreateChildMetaPipelineWithoutDependency(current, *this);
+		child_meta_pipeline.GetBasePipeline()->numa_id = 1;
+		child_meta_pipeline.Build(*children[0]);
+	} else {
+		auto &child_meta_pipeline = meta_pipeline.CreateChildMetaPipeline(current, *this);
+		child_meta_pipeline.Build(*children[0]);
+	}
 }
 }  // namespace duckdb
