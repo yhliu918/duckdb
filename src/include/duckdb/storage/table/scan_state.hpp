@@ -117,6 +117,7 @@ struct ColumnFetchState {
 	bool full_decompression = false;
 	vector<unique_ptr<Vector>> decompressed_vector;
 	int vector_index = 0;
+	double io_time = 0;
 };
 
 struct ScanFilter {

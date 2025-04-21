@@ -192,6 +192,7 @@ public:
 	int pipeline_id = 0;
 	int parent = 0;
 	bool push_source = false;
+	int total_sink_rows = 0;
 	unordered_map<int, MaterializeMap> materialize_maps;   // rowid_col_idx -> MaterializeMap
 	unordered_map<int, MatSourceInfo> materialize_sources; // pipelineid -> MatSourceInfo
 

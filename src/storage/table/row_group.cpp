@@ -542,17 +542,17 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 					i--;
 					continue;
 				}
-				if (idx == result.row_id_column) {
-					// std::cout << "row_id_column" << std::endl;
-					if (result.data[idx].GetType().InternalType() == PhysicalType::INT64) {
-						result.data[idx].Sequence(UnsafeNumericCast<int64_t>(this->start + current_row), 1, count);
-					} else if (result.data[idx].GetType().InternalType() == PhysicalType::INT32) {
-						// std::cout << "row_id_column" << std::endl;
-						result.data[idx].Sequence(UnsafeNumericCast<int32_t>(this->start + current_row), 1, count);
-					}
-					idx++;
-					continue;
-				}
+				// if (idx == result.row_id_column) {
+				// 	// std::cout << "row_id_column" << std::endl;
+				// 	if (result.data[idx].GetType().InternalType() == PhysicalType::INT64) {
+				// 		result.data[idx].Sequence(UnsafeNumericCast<int64_t>(this->start + current_row), 1, count);
+				// 	} else if (result.data[idx].GetType().InternalType() == PhysicalType::INT32) {
+				// 		// std::cout << "row_id_column" << std::endl;
+				// 		result.data[idx].Sequence(UnsafeNumericCast<int32_t>(this->start + current_row), 1, count);
+				// 	}
+				// 	idx++;
+				// 	continue;
+				// }
 				if (column == COLUMN_IDENTIFIER_ROW_ID) {
 					// scan row id
 					D_ASSERT(result.data[idx].GetType().InternalType() == ROW_TYPE);

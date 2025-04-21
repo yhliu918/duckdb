@@ -15,6 +15,7 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/config.hpp"
 #include "duckdb/main/query_profiler.hpp"
+#include "duckdb/planner/expression/bound_case_expression.hpp"
 #include "duckdb/planner/expression/bound_conjunction_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/operator/list.hpp"
@@ -305,8 +306,8 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalOperator &
 		}
 	}
 
-	// std::string op_str = PrintOperator(plan);
-	// std::cout << op_str << std::endl;
+	std::string op_str = PrintOperator(plan);
+	std::cout << op_str << std::endl;
 	if (!plan) {
 		throw InternalException("Physical plan generator - no plan generated");
 	}
@@ -492,6 +493,14 @@ std::vector<std::string> PhysicalPlanGenerator::PrintOperatorCatalog(const uniqu
 				op_str.push_back(op_str_child[bound_ref.index]);
 			}
 		}
+		if (op_str.size() !=
+		    aggregate.grouped_aggregate_data.aggregates.size() + aggregate.grouped_aggregate_data.groups.size()) {
+			int miss_entries = aggregate.grouped_aggregate_data.aggregates.size() +
+			                   aggregate.grouped_aggregate_data.groups.size() - op_str.size();
+			for (int i = 0; i < miss_entries; i++) {
+				op_str.push_back("agg_entry");
+			}
+		}
 		break;
 	}
 	case PhysicalOperatorType::UNGROUPED_AGGREGATE: {
@@ -521,6 +530,9 @@ std::vector<std::string> PhysicalPlanGenerator::PrintOperatorCatalog(const uniqu
 				// 	op_str.push_back(op_str_child[bound_ref_child.index]);
 				// }
 				// op_str.push_back("bound_function");
+			} else if (expr->type == ExpressionType::CASE_EXPR) {
+				auto &case_expr = (BoundCaseExpression &)*expr;
+				op_str.push_back("case_expr");
 			}
 		}
 		break;

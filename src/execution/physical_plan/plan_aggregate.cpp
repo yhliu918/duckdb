@@ -30,6 +30,7 @@ hugeint_t GetRangeHugeint(const BaseStatistics &nstats) {
 }
 
 static bool CanUsePerfectHashAggregate(ClientContext &context, LogicalAggregate &op, vector<idx_t> &bits_per_group) {
+	return false;
 	if (op.grouping_sets.size() > 1 || !op.grouping_functions.empty()) {
 		return false;
 	}

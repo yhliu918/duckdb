@@ -132,12 +132,23 @@ BufferHandle &ColumnFetchState::GetOrInsertHandle(ColumnSegment &segment) {
 		return entry->second;
 	}
 }
-
+#include <chrono>
+#include <sys/time.h>
+double Now() {
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	return tv.tv_sec * 1000.0 + tv.tv_usec / 1000.0;
+}
 void UncompressedStringStorage::StringFetchRow(ColumnSegment &segment, ColumnFetchState &state, row_t row_id,
                                                Vector &result, idx_t result_idx) {
 	// fetch a single row from the string segment
 	// first pin the main buffer if it is not already pinned
+	// double start = Now();
 	auto &handle = state.GetOrInsertHandle(segment);
+	// double end = Now();
+	// if (end - start > 0) {
+	// 	state.io_time += end - start;
+	// }
 
 	auto baseptr = handle.Ptr() + segment.GetBlockOffset();
 	auto dict = GetDictionary(segment, handle);

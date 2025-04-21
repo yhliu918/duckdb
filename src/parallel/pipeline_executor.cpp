@@ -977,12 +977,27 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 	print = true;
 	if (print) {
 		std::cout << "----------------------------" << std::endl;
+		std::cout << "Pipeline# " << pipeline.pipeline_id << std::endl;
+		std::cout << "----------------------------" << std::endl;
 		std::cout << "IO: " << pipeline.io_time << std::endl;
 		for (int i = 0; i < pipeline.operator_total_time.size() - 1; i++) {
 			std::cout << "Operator " << PhysicalOperatorToString(pipeline.operators[i].get().type)
 			          << " time: " << pipeline.operator_total_time[i] << std::endl;
 		}
 		if (pipeline.sink) {
+			if (pipeline.sink->type == PhysicalOperatorType::HASH_JOIN) {
+				bool flag = false;
+				for (int i = 0; i < pipeline.sink->disable_columns.size(); i++) {
+					if (pipeline.sink->disable_columns[i] == true) {
+						flag = true;
+						break;
+					}
+				}
+				if (flag && pipeline.pipeline_id != 0) {
+					// std::cout << "Card: " << pipeline.sink->estimated_cardinality << std::endl;
+					std::cout << "Sink rows: " << pipeline.total_sink_rows << std::endl;
+				}
+			}
 			std::cout << "Sink operator " << PhysicalOperatorToString(pipeline.sink.get()->type)
 			          << " time: " << pipeline.operator_total_time[pipeline.operator_total_time.size() - 1]
 			          << std::endl;
@@ -1152,6 +1167,7 @@ SinkResultType PipelineExecutor::Sink(DataChunk &chunk, OperatorSinkInput &input
 		return SinkResultType::BLOCKED;
 	}
 #endif
+	pipeline.total_sink_rows += chunk.size();
 	return pipeline.sink->Sink(context, chunk, input);
 }
 
