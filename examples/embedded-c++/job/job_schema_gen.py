@@ -3,8 +3,62 @@ import pyarrow as pa
 from pyarrow import csv
 import pyarrow.parquet as pq
 import os
+import json
+from enum import Enum, auto
+
+logical_types = {
+    pa.int8(): "int8",
+    pa.int16(): "int16",
+    pa.int32(): "int32",
+    pa.int64(): "int64",
+    pa.date32(): "date32",
+    pa.time32("s"): "TIME",
+    pa.string(): "string",
+    pa.float64(): "double",
+    pa.float32(): "float32"
+}
+class LogicalTypeId(Enum):
+    int8 = 11
+    int16 = 12
+    int32 = 13
+    int64 = 14
+    date32 = 15
+    TIME = 16
+    DECIMAL = 21
+    float32 = 22
+    double = 23
+    string = 25
+    BLOB = 26
+    INTERVAL = 27
+    UTINYINT = 28
+    USMALLINT = 29
+    UINTEGER = 30
+    UBIGINT = 31
+    TIMESTAMP_TZ = 32
+    TIME_TZ = 34
+    BIT = 36
+    STRING_LITERAL = 37  # string literals, used for constant strings - only exists while binding
+    INTEGER_LITERAL = 38  # integer literals, used for constant integers - only exists while binding
+    VARINT = 39
+    UHUGEINT = 49
+    HUGEINT = 50
+    POINTER = 51
+    VALIDITY = 53
+    UUID = 54
+    STRUCT = 100
+    LIST = 101
+    MAP = 102
+    TABLE = 103
+    ENUM = 104
+    AGGREGATE_STATE = 105
+    LAMBDA = 106
+    UNION = 107
+    ARRAY = 108
+
+
 
 tables = ['aka_name', 'aka_title', 'cast_info', 'char_name', 'comp_cast_type', 'company_name', 'company_type', 'complete_cast', 'info_type', 'keyword', 'kind_type', 'link_type', 'movie_companies', 'movie_info', 'movie_info_idx', 'movie_keyword', 'movie_link', 'name', 'person_info', 'role_type', 'title']
+
 column_types = {
     "aka_name": {
         "id": pa.int32(),
@@ -158,73 +212,25 @@ column_types = {
     }
 }
 
-def skip_comment(row):
-    if row[0] == "#":
-        return None
-def gen(table_name, file_name):
-    ff = open(file_name, "r")
-    header = [item for item in ff.readlines()]
-    with open(file_name + ".new", "w") as f:
-        for line in header:
-            start = line.find(',"')
-            end = line.find('",')
-            
-            if start != -1 and end != -1:
-                # print(line[:start+1])
-                # print(line[start+1:end+1])
-                # print(line[end+1:])
-                line = line[:start+1] + line[start+1:end+1].replace(',', '').replace('"','') + line[end+1:]
-                # print(line)
-            if len(line.split(",")) != len(column_types[table_name]):
-                continue
-            f.write(line)
-    column_names = list(column_types[table_name].keys())
-    table = csv.read_csv(
-        file_name + ".new",
-        read_options=csv.ReadOptions(column_names=column_names),
-        parse_options=csv.ParseOptions(delimiter=",",  double_quote=True),
-        convert_options=csv.ConvertOptions(
-            column_types=column_types[table_name],
-            null_values=["", "NULL", "NA"]  # 指定哪些值应被视为 NULL
-        )
-    )
-    # table = csv.read_csv(file_name + ".new",
-    #                     read_options=csv.ReadOptions(column_names=column_names),
-    #                     parse_options=csv.ParseOptions(delimiter=","),
-    #                     convert_options=csv.ConvertOptions(
-    #                         column_types=column_types[table_name],
-    #                         auto_dict_encode=True,
-    #                         null_values=['',"", "NULL", "NA", "null", "na", "N/A", "n/a", "None", "none"])
-    #                     )
-    os.system("rm %s" % (file_name + ".new"))
-    chunk_lengths = [len(chunk) for chunk in table[0].chunks]
-    # rowid = []
-    # start = 0
-    # for lens in chunk_lengths:
-    #     rowid.append(pa.array(range(start, start + lens), type=pa.int64()))
-    #     start += lens
-    # rowid = pa.chunked_array(rowid)
+
+data = {}
     
-    # table = table.append_column("rowid", rowid)
-    print(table)
-    return table
-
-
-# if __name__ == "__main__":
-#   if len(sys.argv) < 4:
-#     print("Usage: %s <table_name> <input_file> <output_file>")
-#     exit()
-#   table_name, input_file, output_file = sys.argv[1], sys.argv[2], sys.argv[3]
-#   # print("Transforming %s..." % input_file)
-#   table = gen(table_name, input_file)
-#   pq.write_table(table, output_file, row_group_size=1228800)
-#   print("Transforming %s done..." % input_file)
-
 for table in tables:
-    print(table)
-    table_name = table
-    input_file = f"JOB/{table}.csv"
-    output_file = f"JOB/{table}.parquet"
-    table = gen(table_name, input_file)
-    pq.write_table(table, output_file, row_group_size=1228800)
-    print("Transforming %s done..." % input_file)
+    print(f"Creating schema for table {table}")
+    parquet_file = pq.ParquetFile(f'JOB/{table}.parquet')
+
+    num_rows = parquet_file.metadata.num_rows
+
+    print(f"Number of rows: {num_rows}")
+    schema = pa.schema([pa.field(name, type) for name, type in column_types[table].items()])
+    data[table] = {}
+    col_id = 0
+    data[table]["rowid({})".format(table)] = {'col_id':col_id, 'type':LogicalTypeId.int64.value}
+    col_id+=1
+    for field in schema:
+        data[table][table+"."+field.name] = {'col_id':col_id, 'type':LogicalTypeId[logical_types[field.type]].value}
+        col_id+=1
+    data[table]["table_size"] = num_rows
+with open(f"job_schema.json", "w") as f:
+    json.dump(data, f, indent=4)
+

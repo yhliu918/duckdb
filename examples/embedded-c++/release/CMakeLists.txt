@@ -17,3 +17,10 @@ foreach(A_CPP_FILE ${CPP_FILES})
     target_link_libraries(${EXECUTABLE_NAME} duckdb)
 endforeach(A_CPP_FILE ${CPP_FILES})
 
+file(GLOB CPP_FILES ../job/*.cpp )
+foreach(A_CPP_FILE ${CPP_FILES})
+    get_filename_component(EXECUTABLE_NAME ${A_CPP_FILE} NAME_WE)
+    add_executable(${EXECUTABLE_NAME} ${A_CPP_FILE})
+    target_link_libraries(${EXECUTABLE_NAME} duckdb)
+endforeach(A_CPP_FILE ${CPP_FILES})
+
