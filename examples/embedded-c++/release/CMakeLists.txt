@@ -10,7 +10,7 @@ include_directories(../../../third_party/emhash)
 link_directories(../../../release/src)
 
 
-file(GLOB CPP_FILES ../*.cpp )
+file(GLOB CPP_FILES ../microbenchmark/*.cpp )
 foreach(A_CPP_FILE ${CPP_FILES})
     get_filename_component(EXECUTABLE_NAME ${A_CPP_FILE} NAME_WE)
     add_executable(${EXECUTABLE_NAME} ${A_CPP_FILE})
